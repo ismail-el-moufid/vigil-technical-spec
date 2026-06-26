@@ -1,7 +1,6 @@
-import { useState } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { ENDPOINTS, PAGES, AUTH_STRATEGIES, ROLE_ENFORCEMENT_INFO } from "../data";
 import Badge from "./ui/Badge.jsx";
-import VisibilityBadge from "./ui/VisibilityBadge.jsx";
 import RolePill from "./ui/RolePill.jsx";
 import useMaskSpotlight from "../hooks/useMaskSpotlight.js";
 
@@ -239,7 +238,12 @@ function ConstraintSection({
 	const pages = PAGES.filter((p) => p.endpointIds.includes(ep.id));
 
 	const usedByOpen = isOpenState(usedByKey);
-	const usedByRef = useMaskSpotlight(usedByOpen);
+	// No border on the section box itself — matches every other
+	// ep-section-head box (Payload, Query Params, Constraints), none of
+	// which draw one either. Only the individual nested PageCards get
+	// their own border (when not suppressed — see PageCard's excludeEpId
+	// check), since those are the actual list items.
+	const usedByRef = useMaskSpotlight(usedByOpen, { border: false });
 
 	const belongsToUsedBy = (key) => key.startsWith(usedByKey);
 	const usedByOpenCount = [...openKeys].filter(belongsToUsedBy).length;
@@ -329,12 +333,38 @@ function ConstraintSection({
 	);
 }
 
+// ShapeFrame is its own component so useMaskSpotlight can be called per frame
+// (hooks cannot be called inside .map()). border:false because the frame lives
+// inside the PayloadSection spotlight — no need for a second border layer.
+function ShapeFrame({ frame, shape, frameKey, isOpenState, toggleOpenState })
+{
+	const frameOpen = isOpenState(frameKey);
+	const ref = useMaskSpotlight(frameOpen, { border: false });
+	return (
+		<div ref={ref} className="shape-frame spot">
+			<div
+				className="ep-section-head shape-frame-head"
+				onClick={() => toggleOpenState(frameKey)}
+			>
+				{frame}
+			</div>
+			<div className={"collapsible" + (frameOpen ? " collapsible--open" : "")}>
+				<div className="collapsible-inner shape-frame-body">
+					<pre className="shape-pre">{formatShape(shape)}</pre>
+				</div>
+			</div>
+		</div>
+	);
+}
+
 // PayloadSection uses the registry (openKey/isOpenState/toggleOpenState)
 // so a group-level "collapse all" can reach it without lifting state manually.
+// When value is an object (multi-frame), each frame is individually collapsible
+// via its own registry key, collapsed by default.
 function PayloadSection({ label, value, openKey, isOpenState, toggleOpenState })
 {
 	const open = isOpenState(openKey);
-	const ref = useMaskSpotlight(open);
+	const ref = useMaskSpotlight(open, { border: false });
 	const frameCount = typeof value === "string" ? 1 : Object.keys(value).length;
 
 	return (
@@ -349,13 +379,20 @@ function PayloadSection({ label, value, openKey, isOpenState, toggleOpenState })
 				<div className="collapsible-inner payload-section-body">
 					{typeof value === "string"
 						? <pre className="shape-pre">{formatShape(value)}</pre>
-						: Object.entries(value).map(([frame, shape], i, arr) => (
-							<div key={frame} className="shape-frame">
-								<span className="meta-frame-key">{frame}:</span>
-								<pre className="shape-pre">{formatShape(shape)}</pre>
-								{i < arr.length - 1 ? <div className="shape-frame-sep" /> : null}
-							</div>
-						))}
+						: Object.entries(value).map(([frame, shape]) =>
+						{
+							const frameKey = openKey + ":frame:" + frame;
+							return (
+								<ShapeFrame
+									key={frame}
+									frame={frame}
+									shape={shape}
+									frameKey={frameKey}
+									isOpenState={isOpenState}
+									toggleOpenState={toggleOpenState}
+								/>
+							);
+						})}
 				</div>
 			</div>
 		</div>
@@ -406,18 +443,48 @@ function EndpointCard({
 })
 {
 	const expanded = isOpenState(openKey);
-	const ref = useMaskSpotlight(expanded);
+	// showUsedBy is false exactly when this card is nested inside a
+	// PageCard's "Endpoints used" list (see PageCard below) rather than
+	// shown at the top level of the Endpoints view — and that list item
+	// shouldn't draw its own top/bottom border on top of the page card's.
+	const ref = useMaskSpotlight(expanded, { border: !expanded && showUsedBy });
+
+	// "Collapse attributes" wipes every open registry key that is a child of
+	// this card (payload sections, used-by, nested page cards) without closing
+	// the card itself. A child key always starts with openKey + ":" so the
+	// card's own key (no trailing colon) is naturally excluded.
+	const belongsToCard = useCallback(
+		(key) => key.startsWith(openKey + ":"),
+		[openKey],
+	);
+	const attrOpenCount = useMemo(
+		() => openKeys ? [...openKeys].filter(belongsToCard).length : 0,
+		[openKeys, belongsToCard],
+	);
+	function handleCollapseAttrs(e)
+	{
+		e.stopPropagation();
+		collapseMatching(belongsToCard);
+	}
 
 	return (
 		<div
 			ref={ref}
 			id={ep.id}
-			className={"ep-card spot" + (highlighted ? " highlight-ring" : "")}
+			className={"ep-card spot" + (expanded ? " ep-card--open" : "") + (highlighted ? " highlight-ring" : "")}
 		>
 			<div className="ep-card-header" onClick={() => toggleOpenState(openKey)}>
 				<Badge method={ep.method} />
 				<span className="ep-route">{ep.route}</span>
-				<VisibilityBadge internal={ep.internal} />
+				<button
+					type="button"
+					className="group-hd-collapse-btn ep-card-collapse-btn"
+					onClick={handleCollapseAttrs}
+					disabled={!expanded || attrOpenCount === 0}
+					title="Collapse attributes"
+				>
+					Collapse attributes
+				</button>
 			</div>
 			<div className={"collapsible" + (expanded ? " collapsible--open" : "")}>
 				<div className="collapsible-inner ep-body">
@@ -527,7 +594,12 @@ function PageCard({
 		(e) => page.endpointIds.includes(e.id) && e.id !== excludeEpId,
 	);
 	const roles = page.role.split(" + ");
-	const ref = useMaskSpotlight(isOpen);
+	// excludeEpId is only set when this card is nested inside an
+	// EndpointCard's "Used by pages" list (see ConstraintSection's
+	// used-by-section) rather than shown at the top level of the Pages
+	// view — and that list item shouldn't draw its own top/bottom border
+	// on top of the used-by section's.
+	const ref = useMaskSpotlight(isOpen, { border: !excludeEpId });
 
 	const epsPrefix = keyPrefix + ":ep:";
 	const belongsToEps = (key) => key.startsWith(epsPrefix);

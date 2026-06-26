@@ -6,13 +6,14 @@ import { FILTER_CHAIN, AUTH_STRATEGIES } from "../data";
  */
 export default function SecurityLayer({ open, onToggle })
 {
+	const collapsibleClass = `collapsible${open ? " collapsible--open" : ""}`;
 	return (
 		<div className="ep-card security-layer">
 			<div className="ep-card-header" onClick={onToggle}>
 				<span className="badge badge--sec">SECURITY</span>
 				<span className="ep-route">Spring Security · Bucket4j</span>
 			</div>
-			<div className={`collapsible${open ? " collapsible--open" : ""}`}>
+			<div className={collapsibleClass}>
 				<div className="collapsible-inner ep-body">
 					<div className="ep-meta-grid security-meta-grid">
 						<span className="meta-label">Filter Chain</span>

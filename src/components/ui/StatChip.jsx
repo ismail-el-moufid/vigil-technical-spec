@@ -3,10 +3,12 @@
  */
 export default function StatChip({ colorClass, num, label, labelClass })
 {
+	const numClass = `stat-chip-num ${colorClass || ""}`;
+	const labelClassName = `stat-chip-label ${labelClass || ""}`;
 	return (
 		<div className="stat-chip">
-			<span className={`stat-chip-num ${colorClass || ""}`}>{num}</span>
-			<span className={`stat-chip-label ${labelClass || ""}`}>{label}</span>
+			<span className={numClass}>{num}</span>
+			<span className={labelClassName}>{label}</span>
 		</div>
 	);
 }

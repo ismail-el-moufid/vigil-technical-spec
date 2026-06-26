@@ -1,5 +1,44 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 
+// ── Shared global clock ───────────────────────────────────────────────────────
+// All useBorderSpotlight instances share a single rAF loop and a single
+// travelProgress value so every expanded group border sweeps in lockstep —
+// the spotlight position is always the same fraction around the perimeter
+// regardless of when a group was mounted or expanded.
+//
+// Subscribers register a callback; the loop runs only while at least one
+// subscriber is active, and stops automatically when the last one unregisters.
+const TRAVEL_SPEED = 0.002;
+let sharedProgress = 0;
+let sharedFrameId = null;
+const subscribers = new Set();
+
+function tickSharedClock()
+{
+	sharedProgress = (sharedProgress + TRAVEL_SPEED) % 1;
+	for (const cb of subscribers) cb(sharedProgress);
+	sharedFrameId = requestAnimationFrame(tickSharedClock);
+}
+
+function subscribeToSharedClock(cb)
+{
+	subscribers.add(cb);
+	if (sharedFrameId === null)
+	{
+		sharedFrameId = requestAnimationFrame(tickSharedClock);
+	}
+	return () =>
+	{
+		subscribers.delete(cb);
+		if (subscribers.size === 0 && sharedFrameId !== null)
+		{
+			cancelAnimationFrame(sharedFrameId);
+			sharedFrameId = null;
+		}
+	};
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
  * useBorderSpotlight - Creates a spotlight effect on fieldset borders
  *
@@ -152,7 +191,7 @@ export default function useBorderSpotlight(collapsed = false)
 		clone.style.pointerEvents = "none";
 		clone.style.opacity = "0";
 		clone.style.transition = "opacity 0.2s ease";
-		clone.style.border = "1px solid var(--border, #fff)";
+		clone.style.border = "0.1px solid var(--border, #fff)";
 		clone.style.borderRadius = "inherit";
 
 		// Switches the clone between a full four-sided border (expanded)
@@ -166,14 +205,14 @@ export default function useBorderSpotlight(collapsed = false)
 		{
 			if (isCollapsed)
 			{
-				clone.style.borderTop = "1px solid var(--border, #fff)";
+				clone.style.borderTop = "0.1px solid var(--border, #fff)";
 				clone.style.borderRight = "transparent";
 				clone.style.borderBottom = "transparent";
 				clone.style.borderLeft = "transparent";
 			}
 			else
 			{
-				clone.style.border = "1px solid var(--border, #fff)";
+				clone.style.border = "0.1px solid var(--border, #fff)";
 			}
 		};
 
@@ -424,9 +463,10 @@ export default function useBorderSpotlight(collapsed = false)
 		};
 
 		// ── Travel animation ──────────────────────────────────────────────
-		let animationFrameId = null;
-		let travelProgress = 0;
-		const TRAVEL_SPEED = 0.002;
+		// This instance subscribes to the module-level shared clock so all
+		// expanded group borders sweep in lockstep. `unsubscribe` holds the
+		// cleanup returned by subscribeToSharedClock(); null when inactive.
+		let unsubscribe = null;
 
 		// Walks the perimeter of a w×h box. Returns a point in THAT box's
 		// own local coordinate space — the caller picks which shape to walk.
@@ -485,86 +525,88 @@ export default function useBorderSpotlight(collapsed = false)
 			return dist / perimeter;
 		};
 
-		const startTravelAnimation = (seedProgress = null) =>
+		// Called on every shared-clock tick while this instance is active.
+		// `progress` is the global sharedProgress value — identical for all
+		// subscribers in the same frame, so all borders advance together.
+		const onTick = (progress) =>
 		{
-			if (seedProgress !== null)
+			// Border: walks its own full perimeter.
+			const bw = parseFloat(clone.style.width);
+			const bh = parseFloat(clone.style.height);
+			const { x: bx, y: by } = perimeterPoint(progress, bw, bh);
+			const bm = spotlightGradient(bx, by, SPOTLIGHT_RADIUS);
+			clone.style.webkitMaskImage = bm;
+			clone.style.maskImage = bm;
+
+			// Legend: walks its OWN (much smaller) perimeter using the
+			// SAME progress value so it stays in visual sync with the border.
+			if (legendOverlay)
 			{
-				travelProgress = ((seedProgress % 1) + 1) % 1;
+				const lRect = legendOverlay.getBoundingClientRect();
+				const {
+				   x: lx,
+				   y: ly
+				} = perimeterPoint(progress, lRect.width, lRect.height);
+				const borderPerimeter = 2 * (bw + bh);
+				const legendPerimeter = 2 * (lRect.width + lRect.height);
+				const legendRadius = borderPerimeter > 0
+					? Math.max(24, SPOTLIGHT_RADIUS * (legendPerimeter / borderPerimeter))
+					: SPOTLIGHT_RADIUS;
+				const lm = spotlightGradient(lx, ly, legendRadius);
+				legendOverlay.style.webkitMaskImage = lm;
+				legendOverlay.style.maskImage = lm;
 			}
 
-			if (animationFrameId !== null) return;
+			// Sync collapse-all button dimensions every frame so the
+			// overlay button tracks the real button's CSS transitions
+			// (max-width, padding, opacity) without ghosting.
+			syncCollapseBtnDimensions();
+		};
 
-			const animate = () =>
-			{
-				travelProgress = (travelProgress + TRAVEL_SPEED) % 1;
-
-				// Border: walks its own full perimeter — unchanged.
-				const bw = parseFloat(clone.style.width);
-				const bh = parseFloat(clone.style.height);
-				const { x: bx, y: by } = perimeterPoint(travelProgress, bw, bh);
-				const bm = spotlightGradient(bx, by, SPOTLIGHT_RADIUS);
-				clone.style.webkitMaskImage = bm;
-				clone.style.maskImage = bm;
-
-				// Legend: walks its OWN (much smaller) perimeter using the
-				// SAME progress value, instead of being handed the border's
-				// point, and at a radius scaled to its own size so it
-				// visibly travels rather than glowing solid.
-				if (legendOverlay)
-				{
-					const lRect = legendOverlay.getBoundingClientRect();
-					const {
-					   x: lx,
-					   y: ly
-					} = perimeterPoint(travelProgress, lRect.width, lRect.height);
-					const borderPerimeter = 2 * (bw + bh);
-					const legendPerimeter = 2 * (lRect.width + lRect.height);
-					const legendRadius = borderPerimeter > 0
-						? Math.max(24, SPOTLIGHT_RADIUS * (legendPerimeter / borderPerimeter))
-						: SPOTLIGHT_RADIUS;
-					const lm = spotlightGradient(lx, ly, legendRadius);
-					legendOverlay.style.webkitMaskImage = lm;
-					legendOverlay.style.maskImage = lm;
-				}
-
-				// Sync collapse-all button dimensions every frame so the
-				// overlay button tracks the real button's CSS transitions
-				// (max-width, padding, opacity) without ghosting.
-				syncCollapseBtnDimensions();
-
-				animationFrameId = requestAnimationFrame(animate);
-			};
-
-			animationFrameId = requestAnimationFrame(animate);
+		const startTravelAnimation = () =>
+		{
+			if (unsubscribe !== null) return; // already subscribed
+			unsubscribe = subscribeToSharedClock(onTick);
 		};
 
 		const stopTravelAnimation = () =>
 		{
-			if (animationFrameId !== null)
+			if (unsubscribe !== null)
 			{
-				cancelAnimationFrame(animationFrameId);
-				animationFrameId = null;
+				unsubscribe();
+				unsubscribe = null;
 			}
 		};
 
-		// Seeds travelProgress from wherever the cursor currently is
-		// (parent-relative px, py), then (re)starts the loop from there.
-		// This is what makes expanding a group feel like the spotlight
-		// "departs" from the cursor rather than snapping to a fixed point.
+		// Seeds the shared clock's progress from wherever the cursor
+		// currently is (parent-relative px, py), then (re)starts the
+		// subscription. This keeps the visual "departure point" near the
+		// cursor when a group expands, even though the seed is applied to
+		// the shared progress — all other subscribers jump to the same
+		// position, which is intentional: they were already in sync, and
+		// seeding preserves that rather than creating a gap.
 		const startTravelFromCursor = (px, py) =>
 		{
-			const bcLeft = parseFloat(clone.style.left);
-			const bcTop  = parseFloat(clone.style.top);
-			const bw = parseFloat(clone.style.width);
-			const bh = parseFloat(clone.style.height);
+			// Only seed the shared clock from the cursor position when no
+			// other groups are currently animating. If peers are already
+			// running, jumping sharedProgress would teleport all their
+			// borders instantly — instead, just join the existing clock
+			// wherever it already is so everything stays in smooth sync.
+			if (subscribers.size === 0)
+			{
+				const bcLeft = parseFloat(clone.style.left);
+				const bcTop  = parseFloat(clone.style.top);
+				const bw = parseFloat(clone.style.width);
+				const bh = parseFloat(clone.style.height);
 
-			const progress = closestPerimeterProgress(px - bcLeft, py - bcTop, bw, bh);
+				const progress = closestPerimeterProgress(px - bcLeft, py - bcTop, bw, bh);
+				sharedProgress = ((progress % 1) + 1) % 1;
+			}
 
-			// Force a restart even if the loop is already running, so a
-			// re-expand always re-seeds from the latest cursor position
-			// instead of being a no-op because animationFrameId is set.
+			// Force a re-subscribe so onTick fires immediately at the
+			// current seed position even if we were already subscribed.
 			stopTravelAnimation();
-			startTravelAnimation(progress);
+			startTravelAnimation();
 		};
 
 		// Expose the live controls so the `[collapsed]` effect above can

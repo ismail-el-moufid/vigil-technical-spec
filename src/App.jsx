@@ -82,6 +82,10 @@ export default function App()
 		]
 		: [["", groupBy(sidebarItems)]];
 
+	// Used by both the sidebar and main-content tab-view wrappers below —
+	// same value either way, so compute it once rather than twice.
+	const tabViewClass = `tab-view tab-view--${prevTab === "endpoints" ? "from-left" : "from-right"}`;
+
 	return (
 		<div className="layout">
 			{/* SIDEBAR */}
@@ -92,15 +96,19 @@ export default function App()
 				</div>
 
 				<div className="tab-row">
-					{["endpoints", "pages"].map((t) => (
-						<button
-							key={t}
-							className={`tab-btn${tab === t ? " active" : ""}`}
-							onClick={() => switchTab(t)}
-						>
-							{t.charAt(0).toUpperCase() + t.slice(1)}
-						</button>
-					))}
+					{["endpoints", "pages"].map((t) =>
+					{
+						const tabBtnClass = `tab-btn${tab === t ? " active" : ""}`;
+						return (
+							<button
+								key={t}
+								className={tabBtnClass}
+								onClick={() => switchTab(t)}
+							>
+								{t.charAt(0).toUpperCase() + t.slice(1)}
+							</button>
+						);
+					})}
 				</div>
 
 				<div className="sidebar-search">
@@ -115,7 +123,7 @@ export default function App()
 				<div className="sidebar-list">
 					<div
 						key={animKey}
-						className={`tab-view tab-view--${prevTab === "endpoints" ? "from-left" : "from-right"}`}
+						className={tabViewClass}
 					>
 						{sidebarMetaGroups.map(([meta, subGroups]) => (
 							<div key={meta}>
@@ -127,35 +135,39 @@ export default function App()
 									/>
 								)}
 								{(!meta || openSidebarMetaGroups.has(meta)) &&
-									[...subGroups].map(([group, items]) => (
-										<div key={group}>
-											<SidebarGroupHeader
-												label={group}
-												count={items.length}
-										 open={openSidebarGroups.has(group)}
-												onToggle={() => toggleSidebarGroup(group)}
-											/>
-											<div
-												className={`collapsible${openSidebarGroups.has(group) ? " collapsible--open" : ""}`}
-											>
-												<div className="collapsible-inner">
-													{items.map((item) => (
-														<SidebarItem
-															key={item.id}
-															item={item}
-															isActive={activeId === item.id}
-															isEndpoint={isEps}
-															onClick={() =>
-																isEps
-																	? navigateTo("endpoints", item.id)
-																	: navigateTo("pages", null, item.id)
-												 }
-														/>
-													))}
+									[...subGroups].map(([group, items]) =>
+									{
+										const groupCollapsibleClass = `collapsible${openSidebarGroups.has(group) ? " collapsible--open" : ""}`;
+										return (
+											<div key={group}>
+												<SidebarGroupHeader
+													label={group}
+													count={items.length}
+											 open={openSidebarGroups.has(group)}
+													onToggle={() => toggleSidebarGroup(group)}
+												/>
+												<div
+													className={groupCollapsibleClass}
+												>
+													<div className="collapsible-inner">
+														{items.map((item) => (
+															<SidebarItem
+																key={item.id}
+																item={item}
+																isActive={activeId === item.id}
+																isEndpoint={isEps}
+																onClick={() =>
+																	isEps
+																		? navigateTo("endpoints", item.id)
+																		: navigateTo("pages", null, item.id)
+													 }
+															/>
+														))}
+													</div>
 												</div>
 											</div>
-										</div>
-									))}
+										);
+									})}
 							</div>
 						))}
 					</div>
@@ -170,7 +182,7 @@ export default function App()
 			<div className="main">
 				<div
 					key={animKey}
-					className={`tab-view tab-view--${prevTab === "endpoints" ? "from-left" : "from-right"}`}
+					className={tabViewClass}
 				>
 					{isEps ? (
 						<EndpointsView highlightId={activeEpId} />

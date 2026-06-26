@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import useBorderSpotlight from "../hooks/useBorderSpotlight.js";
 import GroupHeader from "./ui/GroupHeader.jsx";
 import { PageCard } from "./EndpointComponents.jsx";
@@ -34,15 +34,21 @@ export default function PagesGroupSection({
 	// A key "belongs to this group" if it contains any page id from this group.
 	// Because all registry keys start with or include the originating page id,
 	// this catches endpoint cards, payload sections, usedby toggles, and nested
-	// used-by page cards at any depth.
-	const pageIds = pages.map((p) => p.id);
-	const belongsToGroup = (key) => pageIds.some((id) => key.includes(id));
+	// used-by page cards at any depth. pageIds/belongsToGroup are memoized so
+	// they only get a new identity when `pages` itself actually changes —
+	// otherwise a plain function here would be a new reference every render,
+	// and including it as a dependency below would defeat the memoization.
+	const pageIds = useMemo(() => pages.map((p) => p.id), [pages]);
+	const belongsToGroup = useCallback(
+		(key) => pageIds.some((id) => key.includes(id)),
+		[pageIds],
+	);
 
 	const openCount = useMemo(
 		() =>
 			(pageIds.includes(open) ? 1 : 0) +
 			[...openKeys].filter(belongsToGroup).length,
-		[openKeys, open, pages],
+		[openKeys, open, pageIds, belongsToGroup],
 	);
 
 	function handleCollapseAll()

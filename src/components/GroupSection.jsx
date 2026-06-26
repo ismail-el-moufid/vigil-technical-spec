@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import useBorderSpotlight from "../hooks/useBorderSpotlight.js";
 import GroupHeader from "./ui/GroupHeader.jsx";
 import { EndpointCard } from "./EndpointComponents.jsx";
@@ -32,12 +32,19 @@ export default function GroupSection({
 	const ref = useBorderSpotlight(isCollapsed);
 
 	// A key belongs to this group if it contains any endpoint id from the group.
-	const epIds = groupEps.map((ep) => ep.id);
-	const belongsToGroup = (key) => epIds.some((id) => key.includes(id));
+	// epIds/belongsToGroup are memoized so they only get a new identity when
+	// groupEps itself actually changes — otherwise a plain function here would
+	// be a new reference every render, and including it as a useMemo/useCallback
+	// dependency below would defeat the memoization entirely.
+	const epIds = useMemo(() => groupEps.map((ep) => ep.id), [groupEps]);
+	const belongsToGroup = useCallback(
+		(key) => epIds.some((id) => key.includes(id)),
+		[epIds],
+	);
 
 	const openCount = useMemo(
 		() => [...openKeys].filter(belongsToGroup).length,
-		[openKeys, groupEps],
+		[openKeys, belongsToGroup],
 	);
 
 	function handleCollapseAll()

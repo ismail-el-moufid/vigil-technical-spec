@@ -3,7 +3,10 @@
  */
 
 export default function SidebarItem({
-	item, isActive, isEndpoint, onClick
+	item,
+	isActive,
+	isEndpoint,
+	onClick
 })
 {
 	return (

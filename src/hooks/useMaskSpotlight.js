@@ -14,9 +14,15 @@
  * renders a plain white border instead (no text glow, no clone, no observers
  * at all — just a static border on mount). Pass component state here
  * directly, e.g. <div ref={useMaskSpotlight(isExpanded)}>. The returned ref
- * callback is memoized on `isExpanded`, so listeners are only torn down and
- * rebuilt when `isExpanded` itself changes — not on every unrelated
- * re-render of the component.
+ * callback is memoized on `isExpanded`/`border`, so listeners are only torn
+ * down and rebuilt when one of those actually changes — not on every
+ * unrelated re-render of the component.
+ * @param {{border?: boolean}} [options] - Set `border: false` to keep the
+ * spotlight glow/tracking but drop the top/bottom border lines entirely —
+ * used for cards nested inside another spot-bordered list (e.g. an
+ * EndpointCard inside a page's "Endpoints used" list, or a PageCard inside
+ * an endpoint's "Used by pages" list), where the outer list item shouldn't
+ * also draw its own border.
  */
 
 import { useCallback } from "react";
@@ -24,14 +30,16 @@ import { useCallback } from "react";
 const SPOTLIGHT_RADIUS = "1000px";
 const GLOW_RADIUS = "260px";
 
-const spotlightStyle = `
+const spotlightStyle = (showBorder) => `
 	position: absolute;
 	inset: 0;
 	pointer-events: none;
-	border-top: 1.5px solid currentColor;
-	border-bottom: 1.5px solid currentColor;
+	${showBorder
+		? `border-top: 0.1px solid currentColor;
+	border-bottom: 0.1px solid currentColor;
 	border-left: none;
-	border-right: none;
+	border-right: none;`
+		: "border: none;"}
 	border-radius: inherit;
 	mask-image: radial-gradient(circle ${SPOTLIGHT_RADIUS} at var(--mx, -999px) var(--my, -999px), #000 0%, transparent 60%);
 	-webkit-mask-image: radial-gradient(circle ${SPOTLIGHT_RADIUS} at var(--mx, -999px) var(--my, -999px), #000 0%, transparent 60%);
@@ -64,14 +72,13 @@ const glowInnerStyle = `
 	-webkit-mask-image: radial-gradient(circle ${GLOW_RADIUS} at var(--mx, -999px) var(--my, -999px), rgba(0,0,0,0.85) 0%, transparent 70%);
 `;
 
-const expandedStyle = `
+const expandedStyle = (showBorder) => `
 	position: absolute;
 	inset: 0;
 	pointer-events: none;
-	border-top: 1.5px solid #fff;
-	border-bottom: 1.5px solid #fff;
-	border-left: none;
-	border-right: none;
+	${showBorder
+		? `border: 0.1px solid rgba(255, 255, 255, 0.3);`
+		: "border: none;"}
 	border-radius: inherit;
 `;
 
@@ -106,7 +113,9 @@ function buildClone(wrap)
 	return clone;
 }
 
-export default function useMaskSpotlight(isExpanded = false)
+export default function useMaskSpotlight(isExpanded = false, {
+	border = true
+} = {})
 {
 	return useCallback((wrap) =>
 	{
@@ -114,17 +123,19 @@ export default function useMaskSpotlight(isExpanded = false)
 
 		// Expanded: just a static border, no spotlight tracking, no glow,
 		// no observers — cheapest possible path, same cost as before.
+		// Expanded always shows a full border; the `border` option only
+		// affects the collapsed state's top/bottom border.
 		if (isExpanded)
 		{
-			const border = document.createElement("div");
-			border.setAttribute("style", expandedStyle);
+			const borderEl = document.createElement("div");
+			borderEl.setAttribute("style", expandedStyle(true));
 			const wrapPos = getComputedStyle(wrap).position;
 			if (wrapPos === "static") wrap.style.position = "relative";
-			wrap.appendChild(border);
+			wrap.appendChild(borderEl);
 
 			return () =>
 			{
-				border.remove();
+				borderEl.remove();
 			};
 		}
 
@@ -168,9 +179,9 @@ export default function useMaskSpotlight(isExpanded = false)
 			);
 			wrap.appendChild(host);
 
-			const border = document.createElement("div");
-			border.setAttribute("style", spotlightStyle);
-			host.appendChild(border);
+			const borderEl = document.createElement("div");
+			borderEl.setAttribute("style", spotlightStyle(border));
+			host.appendChild(borderEl);
 
 			// Clone wrap's own content so background-clip:text has glyphs
 			// in this overlay to clip against (an empty div has no text to
@@ -250,8 +261,8 @@ export default function useMaskSpotlight(isExpanded = false)
 				const r = wrap.getBoundingClientRect();
 				const mx = (e.clientX - r.left) + "px";
 				const my = (e.clientY - r.top) + "px";
-				border.style.setProperty("--mx", mx);
-				border.style.setProperty("--my", my);
+				borderEl.style.setProperty("--mx", mx);
+				borderEl.style.setProperty("--my", my);
 				glowInner.style.setProperty("--mx", mx);
 				glowInner.style.setProperty("--my", my);
 			}
@@ -314,5 +325,5 @@ export default function useMaskSpotlight(isExpanded = false)
 			wrap.removeEventListener("mouseleave", onMouseLeave);
 			if (teardownActive) teardownActive();
 		};
-	}, [isExpanded]);
+	}, [isExpanded, border]);
 }

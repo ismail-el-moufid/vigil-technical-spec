@@ -3,8 +3,9 @@
  */
 export default function Badge({ method })
 {
+	const badgeClass = `badge badge--${method.toLowerCase()}`;
 	return (
-		<span className={`badge badge--${method.toLowerCase()}`}>
+		<span className={badgeClass}>
 			{method}
 		</span>
 	);

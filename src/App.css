@@ -253,27 +253,22 @@ body {
 
 /* ── MAIN GROUPS ── */
 
-.group-section-wrap {
-	cursor: pointer;
-}
-
 .group-section-wrap + .group-section-wrap {
 	padding-top: 24px;
 }
 
 .group-section {
 	border: none;
-	border-top: 1px solid transparent;
-	border-bottom: 1px solid transparent;
+	border-top: 0.1px solid transparent;
+	border-bottom: 0.1px solid transparent;
 	border-radius: 8px;
-	padding-bottom: 20px;
+	position: relative;
 	background: transparent;
-	cursor: pointer;
 }
 
 .group-hd {
 	color: var(--text);
-	border: 1px solid transparent;
+	border: 0.1px solid transparent;
 	border-radius: 8px;
 	padding: 14px 10px;
 	margin-left: 24px;
@@ -318,11 +313,12 @@ body {
 .group-hd-collapse-btn {
 	display: flex;
 	align-items: center;
+	justify-content: center;
 	padding: 2px 9px;
 	max-width: 140px;
 	overflow: hidden;
 	background: none;
-	border: 1px solid var(--border2);
+	border: 0.1px solid var(--border2);
 	font-family: var(--font-mono);
 	font-size: 10px;
 	font-weight: 600;
@@ -381,8 +377,16 @@ body {
 	background-color: color-mix(in srgb, var(--text) 8%, transparent);
 }
 
-.meta-group-wrap {
-	cursor: pointer;
+/* ep-card-header uses gap:12px (vs the 6px gap in .group-hd / .ep-section-head),
+   so the disabled state needs a larger negative margin to cancel it fully.
+   The base padding is also tightened to suit the denser card-header row —
+   9px side padding (inherited from .group-hd-collapse-btn) is too wide\ */
+.ep-card-collapse-btn {
+	padding-left: 6px;
+	padding-right: 6px;
+}
+.ep-card-collapse-btn:disabled {
+	margin-left: -12px;
 }
 
 .meta-group-wrap + .meta-group-wrap {
@@ -401,12 +405,12 @@ body {
 	outline: 1px solid transparent;
 	border: none;
 	border-radius: 8px;
+	position: relative;
 	background: transparent;
-	cursor: pointer;
 }
 
 .meta-group-hd {
-	border: 1px solid transparent;
+	border: 0.1px solid transparent;
 	border-radius: 6px;
 	display: flex;
 	align-items: center;
@@ -444,6 +448,7 @@ body {
 .ep-card {
 	overflow: hidden;
 	padding: 12px;
+	position: relative;
 	transition: border-color 0.15s;
 	background: transparent;
 }
@@ -460,15 +465,23 @@ body {
 	margin-bottom: 8px;
 	user-select: none;
 	cursor: pointer;
+	transition: border-color 0.15s;
+}
+
+.ep-card--open .ep-card-header:hover {
+	border-bottom-color: var(--border);
 }
 
 .ep-route {
-	color: var(--text2) !important;
+	color: var(--text2);
 	font-family: var(--font-mono);
 	font-size: 14px;
 	font-weight: 500;
-	color: var(--text);
 	flex: 1;
+}
+
+.ep-card--open .ep-route {
+	color: var(--text);
 }
 
 .ep-toggle {
@@ -539,14 +552,6 @@ body {
 	user-select: none;
 }
 
-.ep-section-head::after {
-	content: "";
-	flex: 1;
-	height: 0.1px;
-	background: var(--border);
-	order: 1;
-}
-
 /* Collapse-all button reused inside .ep-section-head rows (Used by pages,
    Endpoints used). The line above is a ::after pseudo-element, which always
    renders as the row's last child regardless of where a real DOM sibling
@@ -600,6 +605,7 @@ body {
 .page-card {
 	overflow: hidden;
 	padding-bottom: 12px;
+	position: relative;
 	transition: border-color 0.15s;
 	background: transparent;
 }
@@ -611,6 +617,12 @@ body {
 	padding: 14px 16px;
 	user-select: none;
 	cursor: pointer;
+	border-bottom: 0.1px solid transparent;
+	transition: border-color 0.15s;
+}
+
+.page-card--open .page-card-header:hover {
+	border-bottom-color: var(--border);
 }
 
 .page-name {
@@ -765,32 +777,32 @@ body {
 .badge--get {
 	color: var(--color-get);
 	background: color-mix(in srgb, var(--color-get) 12%, transparent);
-	border: 1px solid color-mix(in srgb, var(--color-get) 35%, transparent);
+	border: 0.1px solid color-mix(in srgb, var(--color-get) 35%, transparent);
 }
 .badge--post {
 	color: var(--color-post);
 	background: color-mix(in srgb, var(--color-post) 12%, transparent);
-	border: 1px solid color-mix(in srgb, var(--color-post) 35%, transparent);
+	border: 0.1px solid color-mix(in srgb, var(--color-post) 35%, transparent);
 }
 .badge--put {
 	color: var(--color-put);
 	background: color-mix(in srgb, var(--color-put) 12%, transparent);
-	border: 1px solid color-mix(in srgb, var(--color-put) 35%, transparent);
+	border: 0.1px solid color-mix(in srgb, var(--color-put) 35%, transparent);
 }
 .badge--delete {
 	color: var(--color-delete);
 	background: color-mix(in srgb, var(--color-delete) 12%, transparent);
-	border: 1px solid color-mix(in srgb, var(--color-delete) 35%, transparent);
+	border: 0.1px solid color-mix(in srgb, var(--color-delete) 35%, transparent);
 }
 .badge--ws {
 	color: var(--color-ws);
 	background: color-mix(in srgb, var(--color-ws) 12%, transparent);
-	border: 1px solid color-mix(in srgb, var(--color-ws) 35%, transparent);
+	border: 0.1px solid color-mix(in srgb, var(--color-ws) 35%, transparent);
 }
 .badge--sse {
 	color: var(--color-sse);
 	background: color-mix(in srgb, var(--color-sse) 12%, transparent);
-	border: 1px solid color-mix(in srgb, var(--color-sse) 35%, transparent);
+	border: 0.1px solid color-mix(in srgb, var(--color-sse) 35%, transparent);
 }
 
 /* ── FILTER CHIP ACTIVE VARIANTS ── */
@@ -912,7 +924,7 @@ body {
 		var(--color-constraint-sec) 14%,
 		transparent
 	);
-	border: 1px solid
+	border: 0.1px solid
 		color-mix(in srgb, var(--color-constraint-sec) 35%, transparent);
 }
 .constraint-tag--rate {
@@ -922,7 +934,7 @@ body {
 		var(--color-constraint-rate) 14%,
 		transparent
 	);
-	border: 1px solid
+	border: 0.1px solid
 		color-mix(in srgb, var(--color-constraint-rate) 35%, transparent);
 }
 .constraint-tag--realtime {
@@ -932,7 +944,7 @@ body {
 		var(--color-constraint-realtime) 14%,
 		transparent
 	);
-	border: 1px solid
+	border: 0.1px solid
 		color-mix(in srgb, var(--color-constraint-realtime) 35%, transparent);
 }
 .constraint-tag--fallback {
@@ -942,7 +954,7 @@ body {
 		var(--color-constraint-fallback) 14%,
 		transparent
 	);
-	border: 1px solid
+	border: 0.1px solid
 		color-mix(in srgb, var(--color-constraint-fallback) 35%, transparent);
 }
 .constraint-tag--dedup {
@@ -952,7 +964,7 @@ body {
 		var(--color-constraint-dedup) 14%,
 		transparent
 	);
-	border: 1px solid
+	border: 0.1px solid
 		color-mix(in srgb, var(--color-constraint-dedup) 35%, transparent);
 }
 .constraint-tag--crit {
@@ -962,91 +974,9 @@ body {
 		var(--color-constraint-crit) 14%,
 		transparent
 	);
-	border: 1px solid
+	border: 0.1px solid
 		color-mix(in srgb, var(--color-constraint-crit) 35%, transparent);
 }
-
-/* ── VISIBILITY BADGE (Internal / External on endpoint cards) ── */
-.visibility-badge {
-	font-family: var(--font-mono);
-	font-size: 10px;
-	font-weight: 700;
-	letter-spacing: 0.1em;
-	padding: 3px 7px;
-	border-radius: 3px;
-	flex-shrink: 0;
-	border: 1px solid;
-}
-
-.visibility-badge--ext {
-	color: var(--color-ext);
-	background: color-mix(in srgb, var(--color-ext) 12%, transparent);
-	border-color: color-mix(in srgb, var(--color-ext) 35%, transparent);
-}
-
-.visibility-badge--int {
-	color: var(--color-int);
-	background: color-mix(in srgb, var(--color-int) 12%, transparent);
-	border-color: color-mix(in srgb, var(--color-int) 35%, transparent);
-}
-
-/* ── VISIBILITY FILTER STRIP ── */
-.visibility-filter-strip {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	margin-bottom: 24px;
-	flex-wrap: wrap;
-}
-
-.visibility-filter-btn {
-	background: none;
-	border: 0.1px solid var(--border2);
-	border-radius: 5px;
-	font-family: var(--font-mono);
-	font-size: 11px;
-	font-weight: 600;
-	letter-spacing: 0.08em;
-	padding: 5px 11px;
-	color: var(--text);
-	transition: all 0.12s;
-	text-transform: uppercase;
-}
-
-.visibility-filter-btn:hover {
-	border-color: var(--border2);
-}
-
-.visibility-filter-btn--all.active {
-	background: color-mix(in srgb, var(--accent) 15%, transparent);
-	border-color: color-mix(in srgb, var(--accent) 50%, transparent);
-	color: var(--accent);
-}
-
-.visibility-filter-btn--ext.active {
-	background: color-mix(in srgb, var(--color-ext) 15%, transparent);
-	border-color: color-mix(in srgb, var(--color-ext) 50%, transparent);
-	color: var(--color-ext);
-}
-
-.visibility-filter-btn--int.active {
-	background: color-mix(in srgb, var(--color-int) 15%, transparent);
-	border-color: color-mix(in srgb, var(--color-int) 50%, transparent);
-	color: var(--color-int);
-}
-
-.visibility-filter-hint {
-	font-family: var(--font-mono);
-	font-size: 11px;
-	color: var(--text2);
-	letter-spacing: 0.04em;
-	margin-left: 4px;
-	font-style: italic;
-}
-
-.meta-group-badge--external,
-.meta-group-badge--internal,
-
 
 /* ── SIDEBAR META HEADER ── */
 .sidebar-meta-hd {
@@ -1163,7 +1093,7 @@ body {
 	font-size: 9px;
 	font-weight: 700;
 	letter-spacing: 0.04em;
-	border: 1px solid transparent;
+	border: 0.1px solid transparent;
 	background: transparent;
 	transition:
 		opacity 0.15s,
@@ -1251,21 +1181,27 @@ body {
 }
 
 /* ── PAYLOAD SECTION (collapsible Request/Response card) ── */
+.payload-section {
+	position: relative;
+}
+
 .payload-section-head {
 	cursor: pointer;
 	user-select: none;
 }
 
 .payload-section-body {
-	background: var(--surface2);
-	border: 0.1px solid var(--border2);
-	border-radius: 6px;
 	padding: 10px 12px;
+}
+
+.payload-section-body > *:last-child {
+	margin-bottom: 0;
 }
 
 /* ── USED BY PAGES (collapsible, same structure as payload-section) ── */
 .used-by-section {
 	margin-bottom: 14px;
+	position: relative;
 	/* .payload-section is a direct child of .ep-body (display:flex), so it
 	   gets a BFC "for free" — flex items establish one for their own
 	   contents — which traps used-by-head's margin-top inside the wrap
@@ -1285,10 +1221,31 @@ body {
 
 .shape-frame {
 	display: block;
+	position: relative; /* anchor for useMaskSpotlight's inset:0 overlay */
 }
 
 .shape-frame-sep {
 	height: 8px;
+}
+
+.shape-frame-head {
+	cursor: pointer;
+	user-select: none;
+	font-family: var(--font-mono);
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	color: var(--text2);
+	text-transform: uppercase;
+	margin-top: 6px;
+}
+
+.shape-frame-head:first-child {
+	margin-top: 0;
+}
+
+.shape-frame-body {
+	padding: 4px 0 6px 0;
 }
 
 .meta-frame-key {
@@ -1297,7 +1254,7 @@ body {
 	font-size: 11px;
 	font-weight: 700;
 	letter-spacing: 0.04em;
-	color: var(--color-post);
+	color: var(--text2);
 	text-transform: uppercase;
 	margin-bottom: 2px;
 }

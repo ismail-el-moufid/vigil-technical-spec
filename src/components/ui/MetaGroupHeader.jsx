@@ -10,7 +10,9 @@
 export default function MetaGroupHeader({
 	label,
 	count,
-	collapsed
+	collapsed,
+	onCollapseAll,
+	collapseAllActive,
 })
 {
 	return (
@@ -23,6 +25,15 @@ export default function MetaGroupHeader({
 			<span className="meta-group-toggle">
 				{collapsed ? "→" : "↓"}
 			</span>
+			<button
+				type="button"
+				className="group-hd-collapse-btn"
+				onClick={onCollapseAll}
+				disabled={!collapseAllActive}
+				title="Collapse all"
+			>
+				Collapse all
+			</button>
 		</legend>
 	);
 }
