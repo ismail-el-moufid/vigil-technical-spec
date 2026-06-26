@@ -519,6 +519,7 @@ body {
 	display: grid;
 	grid-template-columns: 90px 1fr;
 	gap: 6px 0;
+	margin-left: 10px;
 }
 
 .meta-label {
@@ -545,6 +546,7 @@ body {
 	display: flex;
 	align-items: center;
 	gap: 6px;
+	margin-left: 10px;
 }
 
 .ep-section-head.used-by-head {
@@ -1222,10 +1224,11 @@ body {
 .shape-frame {
 	display: block;
 	position: relative; /* anchor for useMaskSpotlight's inset:0 overlay */
+	margin-bottom: 10px;
 }
 
 .shape-frame-sep {
-	height: 8px;
+	height: 80px;
 }
 
 .shape-frame-head {
@@ -1260,7 +1263,7 @@ body {
 }
 
 .shape-pre {
-	margin: 0;
+	margin: 0 10px !important;
 	font-family: var(--font-mono);
 	font-size: 12.5px;
 	line-height: 1.55;

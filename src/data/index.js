@@ -33,11 +33,3 @@ export const ENDPOINTS =
 	...INTERNAL_ENDPOINTS,
 ];
 
-// ─── CONVENIENCE VIEWS ───────────────────────────────────────────────────────
-
-export const BACKEND_ENDPOINTS        = ENDPOINTS.filter(ep => ep.owner === "Backend Lead");
-export const FRONTEND_ENDPOINTS       = ENDPOINTS.filter(ep => ep.owner === "Frontend Lead" || ep.owner === "Frontend Lead + Backend Lead");
-export const TELEMETRY_ROLE_ENDPOINTS = ENDPOINTS.filter(ep => ep.owner === "Telemetry Engineer");
-export const AI_ROLE_ENDPOINTS        = ENDPOINTS.filter(ep => ep.owner === "AI Engineer");
-export const PUBLIC_ENDPOINTS         = ENDPOINTS.filter(ep => !ep.internal);
-export const INTERNAL_ENDPOINTS_EXPORT = ENDPOINTS.filter(ep => ep.internal);

@@ -26,7 +26,6 @@ export default function EndpointsView({ highlightId })
 	const [openGroups, toggleGroup, ensureGroup] = useToggleSet(
 		initialGroup ? [initialGroup] : []
 	);
-	const [visFilter] = useState("all");
 	const [openMetaGroups, toggleMetaGroup, ensureMetaGroup] = useToggleSet([
 		"External Facing",
 		"Internal Facing",
@@ -36,17 +35,11 @@ export default function EndpointsView({ highlightId })
 	const external = ENDPOINTS.filter((ep) => !ep.internal);
 	const internal = ENDPOINTS.filter((ep) => ep.internal);
 
-	const allMetaGroups =
+	const metaGroups =
 	[
 		["External Facing", external],
 		["Internal Facing", internal],
 	];
-	const metaGroups =
-		visFilter === "ext"
-			? [["External", external]]
-			: visFilter === "int"
-				? [["Internal", internal]]
-				: allMetaGroups;
 
 	useEffect(() =>
 	{
