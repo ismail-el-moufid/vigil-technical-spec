@@ -5,14 +5,24 @@ export const TELEMETRY_ENDPOINTS =
 		service: "Spring Boot + ClickHouse",
 		owner: "Telemetry Engineer",
 		method: "GET",
-		payload:
-		[
-			"?period",
-			"?service",
-			"?count",
-			"?offset",
-			"Response: { data[], hasMore: boolean }",
-		],
+		request:
+		{
+			query:
+			[
+				{ name: "period",  required: false, type: "string" },
+				{ name: "service", required: false, type: "string" },
+				{ name: "count",   required: false, type: "number" },
+				{ name: "offset",  required: false, type: "number" },
+			],
+			body: null,
+		},
+		response:
+		{
+			200: "{ data[], hasMore: boolean }",
+			401: "{ error: 'unauthorized' }",
+			429: "{ error: 'rate limited' }",
+			500: "{ error: 'server error' }",
+		},
 		group: "Telemetry",
 		tables: ["metrics"],
 		tables_actions: "Read",
@@ -31,6 +41,7 @@ export const TELEMETRY_ENDPOINTS =
 			dedup: "None",
 		},
 		authStrategy: ["JWT", "API_KEY"],
+		requiredRole: "ANY_AUTH",
 		id: "ep-telemetry-metrics",
 	},
 	{
@@ -38,15 +49,25 @@ export const TELEMETRY_ENDPOINTS =
 		service: "Spring Boot + ClickHouse",
 		owner: "Telemetry Engineer",
 		method: "GET",
-		payload:
-		[
-			"?period",
-			"?service",
-			"?sort",
-			"?count",
-			"?offset",
-			"Response: { data[], hasMore: boolean }",
-		],
+		request:
+		{
+			query:
+			[
+				{ name: "period",  required: false, type: "string" },
+				{ name: "service", required: false, type: "string" },
+				{ name: "sort",    required: false, type: "string" },
+				{ name: "count",   required: false, type: "number" },
+				{ name: "offset",  required: false, type: "number" },
+			],
+			body: null,
+		},
+		response:
+		{
+			200: "{ data[], hasMore: boolean }",
+			401: "{ error: 'unauthorized' }",
+			429: "{ error: 'rate limited' }",
+			500: "{ error: 'server error' }",
+		},
 		group: "Telemetry",
 		tables: ["traces"],
 		tables_actions: "Read",
@@ -64,6 +85,7 @@ export const TELEMETRY_ENDPOINTS =
 			dedup: "None",
 		},
 		authStrategy: ["JWT", "API_KEY"],
+		requiredRole: "ANY_AUTH",
 		id: "ep-telemetry-traces",
 	},
 	{
@@ -71,17 +93,27 @@ export const TELEMETRY_ENDPOINTS =
 		service: "Spring Boot + ClickHouse",
 		owner: "Telemetry Engineer",
 		method: "GET",
-		payload:
-		[
-			"?period",
-			"?service",
-			"?severity",
-			"?search",
-			"?sort",
-			"?count",
-			"?offset",
-			"Response: { data[], hasMore: boolean }",
-		],
+		request:
+		{
+			query:
+			[
+				{ name: "period",   required: false, type: "string" },
+				{ name: "service",  required: false, type: "string" },
+				{ name: "severity", required: false, type: "string" },
+				{ name: "search",   required: false, type: "string" },
+				{ name: "sort",     required: false, type: "string" },
+				{ name: "count",    required: false, type: "number" },
+				{ name: "offset",   required: false, type: "number" },
+			],
+			body: null,
+		},
+		response:
+		{
+			200: "{ data[], hasMore: boolean }",
+			401: "{ error: 'unauthorized' }",
+			429: "{ error: 'rate limited' }",
+			500: "{ error: 'server error' }",
+		},
 		group: "Telemetry",
 		tables: ["logs"],
 		tables_actions: "Read, new records only",
@@ -100,6 +132,7 @@ export const TELEMETRY_ENDPOINTS =
 			dedup: "None",
 		},
 		authStrategy: ["JWT", "API_KEY"],
+		requiredRole: "ANY_AUTH",
 		id: "ep-telemetry-logs",
 	},
 	{
@@ -107,12 +140,20 @@ export const TELEMETRY_ENDPOINTS =
 		service: "Spring Boot + ClickHouse",
 		owner: "Telemetry Engineer",
 		method: "SSE",
-		payload:
-		[
-			"?service",
-			"?severity",
-			"server frame: { service, timestamp, trace_id, severity, message, attributes }",
-		],
+		request:
+		{
+			query:
+			[
+				{ name: "service",  required: false, type: "string" },
+				{ name: "severity", required: false, type: "string" },
+				{ name: "token",    required: false, type: "string" },
+			],
+			body: null,
+		},
+		response:
+		{
+			event: "{ service: '<string>', timestamp: '<iso8601>', trace_id: '<string>', severity: '<string>', message: '<string>', attributes: {} }",
+		},
 		group: "Telemetry",
 		tables: ["logs"],
 		tables_actions: "Read",
@@ -128,6 +169,7 @@ export const TELEMETRY_ENDPOINTS =
 			dedup: "None",
 		},
 		authStrategy: ["JWT", "API_KEY"],
+		requiredRole: "ANY_AUTH",
 		id: "ep-telemetry-logs-live",
 	},
 	{
@@ -135,11 +177,19 @@ export const TELEMETRY_ENDPOINTS =
 		service: "Spring Boot + ClickHouse",
 		owner: "Telemetry Engineer",
 		method: "SSE",
-		payload:
-		[
-			"?service",
-			"server frame: { trace_id, span_id, parent_span_id, name, service, timestamp, duration_ms, status, attributes }",
-		],
+		request:
+		{
+			query:
+			[
+				{ name: "service", required: false, type: "string" },
+				{ name: "token",   required: false, type: "string" },
+			],
+			body: null,
+		},
+		response:
+		{
+			event: "{ trace_id: '<string>', span_id: '<string>', parent_span_id: '<string>', name: '<string>', service: '<string>', timestamp: '<iso8601>', duration_ms: number, status: ok | error, attributes: {} }",
+		},
 		group: "Telemetry",
 		tables: ["traces"],
 		tables_actions: "Read",
@@ -156,6 +206,7 @@ export const TELEMETRY_ENDPOINTS =
 			dedup: "None",
 		},
 		authStrategy: ["JWT", "API_KEY"],
+		requiredRole: "ANY_AUTH",
 		id: "ep-telemetry-traces-live",
 	},
 	{
@@ -163,11 +214,19 @@ export const TELEMETRY_ENDPOINTS =
 		service: "Spring Boot + ClickHouse",
 		owner: "Telemetry Engineer",
 		method: "SSE",
-		payload:
-		[
-			"?service",
-			"server frame: { service, timestamp, name, value, attributes }",
-		],
+		request:
+		{
+			query:
+			[
+				{ name: "service", required: false, type: "string" },
+				{ name: "token",   required: false, type: "string" },
+			],
+			body: null,
+		},
+		response:
+		{
+			event: "{ service: '<string>', timestamp: '<iso8601>', name: '<string>', value: number, attributes: {} }",
+		},
 		group: "Telemetry",
 		tables: ["metrics"],
 		tables_actions: "Read",
@@ -184,6 +243,7 @@ export const TELEMETRY_ENDPOINTS =
 			dedup: "None",
 		},
 		authStrategy: ["JWT", "API_KEY"],
+		requiredRole: "ANY_AUTH",
 		id: "ep-telemetry-metrics-live",
 	},
 	{
@@ -191,7 +251,14 @@ export const TELEMETRY_ENDPOINTS =
 		service: "Spring Boot + ClickHouse",
 		owner: "Telemetry Engineer",
 		method: "GET",
-		payload: [],
+		request: { query: [], body: null },
+		response:
+		{
+			200: "[{ key: '<string>', values: ['<string>'] }]",
+			401: "{ error: 'unauthorized' }",
+			429: "{ error: 'rate limited' }",
+			500: "{ error: 'server error' }",
+		},
 		group: "Telemetry",
 		tables: ["logs", "metrics", "traces"],
 		tables_actions: "Read (last 7 days)",
@@ -204,7 +271,7 @@ export const TELEMETRY_ENDPOINTS =
 			dedup: "None",
 		},
 		authStrategy: ["JWT", "API_KEY"],
+		requiredRole: "ANY_AUTH",
 		id: "ep-telemetry-attributes",
 	},
 ];
-

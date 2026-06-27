@@ -1,67 +1,67 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import useBorderSpotlight from "../hooks/useBorderSpotlight.js";
 import GroupHeader from "./ui/GroupHeader.jsx";
-import { EndpointCard } from "./EndpointComponents.jsx";
 
 /**
- * GroupSection - A group section with border spotlight for the Endpoints view.
+ * GroupSection - Generic group section with border spotlight.
  *
- * Each EndpointCard's openKey is "ep:" + ep.id — unique per endpoint globally,
- * so belongsToGroup can match by id substring across all nesting depths
- * (payload sections, used-by toggles, nested page cards).
+ * `items` is an array of objects with `.id` — used to compute belongsToGroup.
+ * `children` is the rendered content inside the collapsible.
  *
- * Collapse-all button: wipes every open registry key that belongs to any
- * endpoint in this group, collapsing payloads, used-by sections, and nested
- * page cards in one state update. Only shown once at least 2 of those keys
- * are actually open — with 0 or 1 expanded there's nothing meaningful to
- * collapse "all" of.
+ * Optional pages-specific props:
+ *   extraOpenCount  - added to openCount (e.g. 1 when the single-select page is open)
+ *   onCollapseExtra - called during collapseAll (e.g. setOpen(null))
+ *
+ * Children are lazy-mounted: nothing renders inside the collapsible until the
+ * group is first expanded. Once mounted they stay in the DOM so subsequent
+ * collapse/expand transitions animate normally. This keeps the fieldset DOM
+ * trivially small on mount, which makes useBorderSpotlight's cloneNode(true)
+ * cheap and prevents the view-switch lag that occurs when all groups mount
+ * simultaneously.
  */
 export default function GroupSection({
 	group,
-	groupEps,
+	items,
 	openGroups,
 	toggleGroup,
-	isOpenState,
-	toggleOpenState,
 	openKeys,
 	collapseMatching,
-	highlightId,
+	extraOpenCount = 0,
+	onCollapseExtra,
+	children,
 })
 {
 	const isCollapsed = !openGroups.has(group);
 	const ref = useBorderSpotlight(isCollapsed);
 
-	// A key belongs to this group if it contains any endpoint id from the group.
-	// epIds/belongsToGroup are memoized so they only get a new identity when
-	// groupEps itself actually changes — otherwise a plain function here would
-	// be a new reference every render, and including it as a useMemo/useCallback
-	// dependency below would defeat the memoization entirely.
-	const epIds = useMemo(() => groupEps.map((ep) => ep.id), [groupEps]);
+	// Once true, stays true — children enter the DOM on first expand and
+	// never leave, so the collapsible animation works on all subsequent toggles.
+	const [hasOpened, setHasOpened] = useState(!isCollapsed);
+	if (!hasOpened && !isCollapsed) setHasOpened(true);
+
+	const ids = useMemo(() => items.map((item) => item.id), [items]);
 	const belongsToGroup = useCallback(
-		(key) => epIds.some((id) => key.includes(id)),
-		[epIds],
+		(key) => ids.some((id) => key.includes(id)),
+		[ids],
 	);
 
 	const openCount = useMemo(
-		() => [...openKeys].filter(belongsToGroup).length,
-		[openKeys, belongsToGroup],
+		() => extraOpenCount + [...openKeys].filter(belongsToGroup).length,
+		[openKeys, belongsToGroup, extraOpenCount],
 	);
 
 	function handleCollapseAll()
 	{
+		onCollapseExtra?.();
 		collapseMatching(belongsToGroup);
 	}
 
 	// Single source of truth for "click to toggle": fires for clicks on the
-	// legend (header), the wrapper's own padding (the area that used to be
-	// the fieldset's padding before it moved to `.group-section-wrap`), or
-	// directly on the bare fieldset (the spotlight border itself is a
-	// pointer-events:none clone, so a click there falls through to this
-	// fieldset underneath it). Deliberately a WHITELIST rather than
-	// excluding `.collapsible`: nested content can have its own
-	// headers/toggles that live outside their own `.collapsible` wrapper
-	// (e.g. a page card's header), and those would wrongly bubble into a
-	// group toggle under a blacklist approach.
+	// legend (header), the wrapper's own padding, or directly on the bare
+	// fieldset. Deliberately a WHITELIST rather than excluding `.collapsible`:
+	// nested content can have its own headers/toggles that live outside their
+	// own `.collapsible` wrapper, and those would wrongly bubble into a group
+	// toggle under a blacklist approach.
 	function handleFieldsetClick(e)
 	{
 		if (e.target.closest(".group-hd-collapse-btn")) return;
@@ -81,29 +81,18 @@ export default function GroupSection({
 	}
 
 	return (
-		<div className="group-section-wrap" onClick={handleFieldsetClick}>
+		<div className={"group-section-wrap" + (isCollapsed ? " group-section-wrap--collapsed" : "")} onClick={handleFieldsetClick}>
 			<fieldset ref={ref} className="group-section" key={group}>
 				<GroupHeader
 					label={group}
-					count={groupEps.length}
+					count={items.length}
 					collapsed={isCollapsed}
 					onCollapseAll={handleCollapseAll}
 					collapseAllActive={!isCollapsed && openCount >= 2}
 				/>
 				<div className={"collapsible" + (!isCollapsed ? " collapsible--open" : "")}>
 					<div className="collapsible-inner">
-						{groupEps.map((ep) => (
-							<EndpointCard
-								key={ep.id}
-								ep={ep}
-								openKey={"ep:" + ep.id}
-								isOpenState={isOpenState}
-								toggleOpenState={toggleOpenState}
-								highlighted={highlightId === ep.id}
-								openKeys={openKeys}
-								collapseMatching={collapseMatching}
-							/>
-						))}
+						{hasOpened && children}
 					</div>
 				</div>
 			</fieldset>

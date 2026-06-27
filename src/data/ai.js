@@ -5,11 +5,21 @@ export const AI_ENDPOINTS =
 		service: "Spring Boot + FastAPI + Ollama + ClickHouse",
 		owner: "AI Engineer",
 		method: "POST",
-		payload:
-		[
-			"Request body: { messages: [{ role: 'user' | 'assistant', content: string }] }",
-			"Response: chunked — data: { token: '...' } per line, data: { done: true } on completion",
-		],
+		request: {
+			query: [],
+		   body: [
+			   {
+			      name: "messages",
+			      type: "[{ role: user | assistant, content: string }]",
+			      required: true
+			   }
+			]
+		},
+		response:
+		{
+			chunk: "data: { token: '...' }",
+			done:  "data: { done: true }",
+		},
 		group: "AI",
 		tables: ["logs", "metrics", "traces"],
 		tables_actions: "Read",
@@ -30,6 +40,7 @@ export const AI_ENDPOINTS =
 			dedup: "None",
 		},
 		authStrategy: ["JWT", "API_KEY"],
+		requiredRole: "ANY_AUTH",
 		id: "ep-llm-analyze",
 	},
 ];

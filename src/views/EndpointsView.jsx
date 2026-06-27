@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { ENDPOINTS } from "../data";
-import useToggleSet from "../hooks/useToggleSet.js";
 import useOpenState from "../hooks/useOpenState.js";
 import MetaGroupSection from "../components/MetaGroupSection.jsx";
 import SecurityLayer from "../components/SecurityLayer.jsx";
@@ -17,16 +16,17 @@ export default function EndpointsView({ highlightId })
 	   openKeys,
 	   isOpenState,
 	   toggleOpenState,
+	   ,
 	   collapseMatching
 	] = useOpenState();
 
 	const initialGroup = highlightId
 		? ENDPOINTS.find((e) => e.id === highlightId)?.group
 		: null;
-	const [openGroups, toggleGroup, ensureGroup] = useToggleSet(
+	const [openGroups, , toggleGroup, ensureGroup] = useOpenState(
 		initialGroup ? [initialGroup] : []
 	);
-	const [openMetaGroups, toggleMetaGroup, ensureMetaGroup] = useToggleSet([
+	const [openMetaGroups, , toggleMetaGroup, ensureMetaGroup] = useOpenState([
 		"External Facing",
 		"Internal Facing",
 	]);
@@ -43,17 +43,60 @@ export default function EndpointsView({ highlightId })
 
 	useEffect(() =>
 	{
-		if (highlightId)
-		{
-			// Open the highlighted endpoint card in the registry
-			const epKey = "ep:" + highlightId;
-			if (!isOpenState(epKey)) toggleOpenState(epKey);
+		if (!highlightId) return;
+		const ep = ENDPOINTS.find((e) => e.id === highlightId);
+		if (ep?.group) ensureGroup(ep.group);
+		if (ep) ensureMetaGroup(ep.internal ? "Internal Facing" : "External Facing");
 
-			const ep = ENDPOINTS.find((e) => e.id === highlightId);
-			if (ep?.group) ensureGroup(ep.group);
-			if (ep) ensureMetaGroup(ep.internal ? "Internal Facing" : "External Facing");
-		}
-	}, [highlightId, ensureGroup, ensureMetaGroup, isOpenState, toggleOpenState]);
+		const t = setTimeout(() =>
+		{
+			toggleOpenState("ep:" + highlightId);
+			// Wait for the collapsible's max-height transition to finish before
+			// measuring — mid-animation the card height is wrong (max-height: 9999px
+			// animating down to actual content height).
+			const el = document.getElementById(highlightId);
+			const scroller = document.querySelector(".main");
+			if (!el || !scroller) return;
+			const collapsible = el.querySelector(".collapsible");
+			const doScroll = () =>
+			{
+				const pad        = 32;
+				const rect       = el.getBoundingClientRect();
+				const scrollRect = scroller.getBoundingClientRect();
+				const elTop      = rect.top    - scrollRect.top;
+				const elBottom   = rect.bottom - scrollRect.top;
+				const viewHeight = scroller.clientHeight;
+				if (elTop < pad)
+					scroller.scrollBy({ top: elTop - pad, behavior: "smooth" });
+				else if (elBottom > viewHeight - pad)
+					scroller.scrollBy({
+					   top: elBottom - viewHeight + pad,
+					   behavior: "smooth"
+					});
+			};
+			if (collapsible)
+			{
+				// max-height animates to 9999px so transitionend fires at the end
+				// of the full duration regardless of actual content height.
+				// Instead, poll via rAF until scrollHeight stops growing.
+				let lastH = 0;
+				const poll = () =>
+				{
+					const h = collapsible.scrollHeight;
+					if (h === lastH) 
+					{
+						doScroll(); return; 
+					}
+					lastH = h;
+					requestAnimationFrame(poll);
+				};
+				requestAnimationFrame(poll);
+			}
+			else doScroll();
+		}, 0);
+		return () => clearTimeout(t);
+	// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [highlightId]);
 
 	return (
 		<div>

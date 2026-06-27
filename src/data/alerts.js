@@ -8,15 +8,15 @@ export const ALERT_ENDPOINTS =
 		request:
 		{
 			auth: "{ type: 'auth', token: '<jwt or api_key>' }",
-			ack: "{ type: 'ack', alert_id: '...', status: 'acknowledged | resolved' }",
+			ack: "{ type: 'ack', alert_id: '<uuid>', status: acknowledged | resolved }",
 		},
 		response:
 		{
-			alert: "{ type: 'alert', data: { id, rule_id, service, triggered_at, llm_analysis } }",
-			llm: "{ type: 'llm', data: { id, status, llm_analysis } }",
-			status: "{ type: 'status', data: { alert_id, user_email, status, acked_at } }",
-			error: "{ type: 'error', message: '...' }",
-			rateLimited: "{ type: 'error', message: 'rate limited', retry_after_seconds }",
+			alert:       "{ type: 'alert', data: { id: '<uuid>', rule_id: '<uuid>', service: '<string>', triggered_at: '<iso8601>', llm_analysis: '<string>' } }",
+			llm:         "{ type: 'llm', data: { id: '<uuid>', status: '<string>', llm_analysis: '<string>' } }",
+			status:      "{ type: 'status', data: { alert_id: '<uuid>', user_email: '<email>', status: acknowledged | resolved, acked_at: '<iso8601>' } }",
+			error:       "{ type: 'error', message: '<string>' }",
+			rateLimited: "{ type: 'error', message: 'rate limited', retry_after_seconds: number }",
 			authTimeout: "{ type: 'error', message: 'auth timeout' } — sent before connection is force-closed",
 		},
 		group: "Alerts",
@@ -57,16 +57,16 @@ export const ALERT_ENDPOINTS =
 		{
 			query:
 			[
-				{ name: "period", required: false, type: "string" },
+				{ name: "period",  required: false, type: "string" },
 				{ name: "service", required: false, type: "string" },
-				{ name: "count", required: false, type: "number" },
-				{ name: "offset", required: false, type: "number" },
+				{ name: "count",   required: false, type: "number" },
+				{ name: "offset",  required: false, type: "number" },
 			],
 			body: null,
 		},
 		response:
 		{
-			200: "{ data: [{ id, rule_id, service, triggered_at, llm_analysis, my_ack: { status, acked_at } | null }], hasMore: boolean }",
+			200: "{ data: [{ id: '<uuid>', rule_id: '<uuid>', service: '<string>', triggered_at: '<iso8601>', llm_analysis: '<string>', my_ack: { status: acknowledged | resolved, acked_at: '<iso8601>' } | null }], hasMore: boolean }",
 			401: "{ error: 'unauthorized' }",
 			429: "{ error: 'rate limited' }",
 			500: "{ error: 'server error' }",
@@ -101,14 +101,14 @@ export const ALERT_ENDPOINTS =
 		{
 			query:
 			[
-				{ name: "count", required: false, type: "number" },
+				{ name: "count",  required: false, type: "number" },
 				{ name: "offset", required: false, type: "number" },
 			],
 			body: null,
 		},
 		response:
 		{
-			200: "{ data: [{ id, preset, service, threshold, severity, enabled, is_default: boolean }], hasMore: boolean }",
+			200: "{ data: [{ id: '<uuid>', service: '<string>', threshold: '<number>', severity: '<string>', enabled: boolean, is_preset: boolean, is_default: boolean }], hasMore: boolean }",
 			401: "{ error: 'unauthorized' }",
 			429: "{ error: 'rate limited' }",
 			500: "{ error: 'server error' }",
@@ -138,11 +138,17 @@ export const ALERT_ENDPOINTS =
 		request:
 			{
 				query: [],
-				body: "{ preset: HIGH_ERROR_RATE | HIGH_LATENCY | SERVICE_DOWN, service, threshold, severity, enabled }",
+				body:
+				[
+					{ name: "service",   type: "string",  required: true },
+					{ name: "threshold", type: "number",  required: true },
+					{ name: "severity",  type: "string",  required: true },
+					{ name: "enabled",   type: "boolean", required: true },
+				],
 			},
 		response:
 		{
-			201: "{ id, preset, service, threshold, severity, enabled, is_default: boolean }",
+			201: "{ id: '<uuid>', service: '<string>', threshold: '<number>', severity: '<string>', enabled: boolean, is_preset: boolean, is_default: boolean }",
 			400: "{ error: '<validation message>' }",
 			401: "{ error: 'unauthorized' }",
 			403: "{ error: 'admin role required' }",
@@ -155,9 +161,8 @@ export const ALERT_ENDPOINTS =
 		constraints: {
 			criteria:
 			[
-				"preset values are a fixed enum, same 3 types as the seeded defaults — not a separate /presets endpoint",
-				"is_default is never client-settable; always false on rules created via this endpoint",
-				"Frontend may pre-fill this form from an existing rule's values ('use as template'/clone) — purely a frontend UX detail, no API shape change",
+				"is_preset and is_default are never client-settable; always false on rules created via this endpoint",
+				"Frontend may pre-fill this form from an existing rule's values (clone) — purely a frontend UX detail, no API shape change",
 				"403 is returned when an authenticated caller lacks the ADMIN role — see Required Role",
 			],
 			security: [
@@ -177,13 +182,21 @@ export const ALERT_ENDPOINTS =
 		service: "Spring Boot + PostgreSQL",
 		owner: "Backend Lead",
 		method: "PUT",
-		request: { query: [], body: "{ enabled (partial) or full rule fields }" },
+		request: {
+		   query: [],
+		   body: [
+		      { name: "enabled", type: "boolean", required: false },
+		      { name: "service", type: "string", required: false },
+		      { name: "threshold", type: "number", required: false },
+		      { name: "severity", type: "string", required: false }
+		   ]
+		},
 		response:
 		{
-			200: "{ id, preset, service, threshold, severity, enabled, is_default: boolean }",
+			200: "{ id: '<uuid>', service: '<string>', threshold: '<number>', severity: '<string>', enabled: boolean, is_preset: boolean, is_default: boolean }",
 			400: "{ error: '<validation message>' }",
 			401: "{ error: 'unauthorized' }",
-			403: "{ error: 'admin role required' } | { error: 'cannot modify preset, service, threshold, or severity on a default rule' }",
+			403: "{ error: 'admin role required' } | { error: 'cannot modify service, threshold, or severity on a default rule' }",
 			404: "{ error: 'rule not found' }",
 			429: "{ error: 'rate limited' }",
 			500: "{ error: 'server error' }",
@@ -229,6 +242,7 @@ export const ALERT_ENDPOINTS =
 		constraints: {
 			criteria: [
 			   "If is_default: true on the target row, request is rejected with 403 — default rules cannot be deleted, only disabled via PUT { enabled: false }",
+			   "is_preset: true rules can be deleted freely",
 			   "403 has two distinct causes that share one status code: caller lacks ADMIN role (role check, see Required Role) vs caller is ADMIN but targets a default rule (business rule) — disambiguate by the error message, not the status code",
 			],
 			security: [
@@ -248,10 +262,15 @@ export const ALERT_ENDPOINTS =
 		service: "Spring Boot + PostgreSQL",
 		owner: "Backend Lead",
 		method: "PUT",
-		request: { query: [], body: "{ status: acknowledged | resolved }" },
+		request: {
+			query: [],
+			body: [
+			   { name: "status", type: "acknowledged | resolved", required: true }
+			]
+		},
 		response:
 		{
-			200: "{ alert_id, user_email, status, acked_at }",
+			200: "{ alert_id: '<uuid>', user_email: '<email>', status: acknowledged | resolved, acked_at: '<iso8601>' }",
 			400: "{ error: '<validation message>' }",
 			401: "{ error: 'unauthorized' }",
 			404: "{ error: 'alert not found' }",

@@ -5,7 +5,15 @@ export const USERS_ENDPOINTS =
 		service: "Spring Boot + PostgreSQL",
 		owner: "Backend Lead",
 		method: "GET",
-		payload: [],
+		request: { query: [], body: null },
+		response:
+		{
+			200: "[{ id: '<uuid>', email: '<email>', role: admin | viewer }]",
+			401: "{ error: 'unauthorized' }",
+			403: "{ error: 'admin role required' }",
+			429: "{ error: 'rate limited' }",
+			500: "{ error: 'server error' }",
+		},
 		group: "Users",
 		tables: ["users"],
 		tables_actions: "Read",
@@ -18,6 +26,7 @@ export const USERS_ENDPOINTS =
 			dedup: "None",
 		},
 		authStrategy: ["JWT", "API_KEY"],
+		requiredRole: "ADMIN",
 		id: "ep-users-list",
 	},
 	{
@@ -25,7 +34,25 @@ export const USERS_ENDPOINTS =
 		service: "Spring Boot + PostgreSQL",
 		owner: "Backend Lead",
 		method: "POST",
-		payload: ["email", "password", "role: admin | viewer"],
+		request:
+		{
+			query: [],
+			body:
+			[
+				{ name: "email",    type: "string",         required: true },
+				{ name: "password", type: "string",         required: true },
+				{ name: "role",     type: "admin | viewer", required: true },
+			],
+		},
+		response:
+		{
+			201: "{ id: '<uuid>', email: '<email>', role: admin | viewer }",
+			400: "{ error: '<validation message>' }",
+			401: "{ error: 'unauthorized' }",
+			403: "{ error: 'admin role required' }",
+			429: "{ error: 'rate limited' }",
+			500: "{ error: 'server error' }",
+		},
 		group: "Users",
 		tables: ["users"],
 		tables_actions: "Insert",
@@ -38,6 +65,7 @@ export const USERS_ENDPOINTS =
 			dedup: "None",
 		},
 		authStrategy: ["JWT", "API_KEY"],
+		requiredRole: "ADMIN",
 		id: "ep-users-create",
 	},
 	{
@@ -45,7 +73,23 @@ export const USERS_ENDPOINTS =
 		service: "Spring Boot + PostgreSQL",
 		owner: "Backend Lead",
 		method: "PUT",
-		payload: ["email?", "password?"],
+		request:
+		{
+			query: [],
+			body:
+			[
+				{ name: "email",    type: "string", required: false },
+				{ name: "password", type: "string", required: false },
+			],
+		},
+		response:
+		{
+			200: "{ id: '<uuid>', email: '<email>', role: admin | viewer }",
+			400: "{ error: '<validation message>' }",
+			401: "{ error: 'unauthorized' }",
+			429: "{ error: 'rate limited' }",
+			500: "{ error: 'server error' }",
+		},
 		group: "Users",
 		tables: ["users"],
 		tables_actions: "Update",
@@ -58,6 +102,7 @@ export const USERS_ENDPOINTS =
 			dedup: "None",
 		},
 		authStrategy: ["JWT", "API_KEY"],
+		requiredRole: "ANY_AUTH",
 		id: "ep-users-me",
 	},
 	{
@@ -65,7 +110,26 @@ export const USERS_ENDPOINTS =
 		service: "Spring Boot + PostgreSQL",
 		owner: "Backend Lead",
 		method: "PUT",
-		payload: ["email?", "role?: admin | viewer", "password?"],
+		request:
+		{
+			query: [],
+			body:
+			[
+				{ name: "email",    type: "string",         required: false },
+				{ name: "role",     type: "admin | viewer", required: false },
+				{ name: "password", type: "string",         required: false },
+			],
+		},
+		response:
+		{
+			200: "{ id: '<uuid>', email: '<email>', role: admin | viewer }",
+			400: "{ error: '<validation message>' }",
+			401: "{ error: 'unauthorized' }",
+			403: "{ error: 'admin role required' }",
+			404: "{ error: 'user not found' }",
+			429: "{ error: 'rate limited' }",
+			500: "{ error: 'server error' }",
+		},
 		group: "Users",
 		tables: ["users"],
 		tables_actions: "Update",
@@ -78,6 +142,7 @@ export const USERS_ENDPOINTS =
 			dedup: "None",
 		},
 		authStrategy: ["JWT", "API_KEY"],
+		requiredRole: "ADMIN",
 		id: "ep-users-update",
 	},
 	{
@@ -85,7 +150,16 @@ export const USERS_ENDPOINTS =
 		service: "Spring Boot + PostgreSQL",
 		owner: "Backend Lead",
 		method: "DELETE",
-		payload: [],
+		request: { query: [], body: null },
+		response:
+		{
+			204: "Empty response",
+			401: "{ error: 'unauthorized' }",
+			403: "{ error: 'admin role required' }",
+			404: "{ error: 'user not found' }",
+			429: "{ error: 'rate limited' }",
+			500: "{ error: 'server error' }",
+		},
 		group: "Users",
 		tables: ["users"],
 		tables_actions: "Delete",
@@ -98,6 +172,7 @@ export const USERS_ENDPOINTS =
 			dedup: "None",
 		},
 		authStrategy: ["JWT", "API_KEY"],
+		requiredRole: "ADMIN",
 		id: "ep-users-delete",
 	},
 ];

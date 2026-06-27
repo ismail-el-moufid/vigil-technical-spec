@@ -340,6 +340,7 @@ function ShapeFrame({ frame, shape, frameKey, isOpenState, toggleOpenState })
 {
 	const frameOpen = isOpenState(frameKey);
 	const ref = useMaskSpotlight(frameOpen, { border: false });
+	const isCookieShape = shape !== null && typeof shape === "object" && ("body" in shape || "cookies" in shape || "clears" in shape);
 	return (
 		<div ref={ref} className="shape-frame spot">
 			<div
@@ -350,7 +351,28 @@ function ShapeFrame({ frame, shape, frameKey, isOpenState, toggleOpenState })
 			</div>
 			<div className={"collapsible" + (frameOpen ? " collapsible--open" : "")}>
 				<div className="collapsible-inner shape-frame-body">
-					<pre className="shape-pre">{formatShape(shape)}</pre>
+					{isCookieShape
+						? <>
+							{shape.body && <pre className="shape-pre">{formatShape(shape.body)}</pre>}
+							{shape.cookies && (
+								<div className="cookie-row">
+									<span className="cookie-label">Sets</span>
+									{shape.cookies.map((c) => (
+										<span key={c} className="cookie-pill">{c}</span>
+									))}
+								</div>
+							)}
+							{shape.clears && (
+								<div className="cookie-row">
+									<span className="cookie-label">Clears</span>
+									{shape.clears.map((c) => (
+										<span key={c} className="cookie-pill cookie-pill--clears">{c}</span>
+									))}
+								</div>
+							)}
+						</>
+						: <pre className="shape-pre">{formatShape(shape)}</pre>
+					}
 				</div>
 			</div>
 		</div>
@@ -402,13 +424,13 @@ function PayloadSection({ label, value, openKey, isOpenState, toggleOpenState })
 // Renders URI query params as pills — deliberately NOT routed through
 // PayloadSection's code-block/frame rendering, so a query string can never
 // be visually mistaken for a request body or a WS frame.
-function QueryParamsSection({ params })
+function QueryParamsSection({ params, label = "Query Params" })
 {
 	if (!params || params.length === 0) return null;
 
 	return (
 		<div className="query-params-section">
-			<div className="ep-section-head">Query Params ({params.length})</div>
+			<div className="ep-section-head">{label} ({params.length})</div>
 			<div className="query-params-row">
 				{params.map((p) => (
 					<span
@@ -447,7 +469,10 @@ function EndpointCard({
 	// PageCard's "Endpoints used" list (see PageCard below) rather than
 	// shown at the top level of the Endpoints view — and that list item
 	// shouldn't draw its own top/bottom border on top of the page card's.
-	const ref = useMaskSpotlight(expanded, { border: !expanded && showUsedBy });
+	// border: true when collapsed (hover spotlight + border lines), false when
+	// expanded (avoids drawing a second border on top of the open page card's
+	// own border when this card is nested inside a PageCard's Endpoints list).
+	const ref = useMaskSpotlight(expanded, { border: !expanded });
 
 	// "Collapse attributes" wipes every open registry key that is a child of
 	// this card (payload sections, used-by, nested page cards) without closing
@@ -471,9 +496,10 @@ function EndpointCard({
 		<div
 			ref={ref}
 			id={ep.id}
-			className={"ep-card spot" + (expanded ? " ep-card--open" : "") + (highlighted ? " highlight-ring" : "")}
+			className={"ep-card spot" + (expanded ? " ep-card--open" : " ep-card--collapsed") + (highlighted ? " highlight-ring" : "")}
+			onClick={!expanded ? () => toggleOpenState(openKey) : undefined}
 		>
-			<div className="ep-card-header" onClick={() => toggleOpenState(openKey)}>
+			<div className="ep-card-header" onClick={expanded ? () => toggleOpenState(openKey) : undefined}>
 				<Badge method={ep.method} />
 				<span className="ep-route">{ep.route}</span>
 				<button
@@ -531,14 +557,24 @@ function EndpointCard({
 						: ep.request && (
 							<>
 								<QueryParamsSection params={ep.request.query} />
-								{ep.request.body && (
-									<PayloadSection
-										label="Body"
-										value={ep.request.body}
-										openKey={openKey + ":payload:Body"}
-										isOpenState={isOpenState}
-										toggleOpenState={toggleOpenState}
-									/>
+								{Array.isArray(ep.request.body)
+									? <QueryParamsSection params={ep.request.body} label="Body Fields" />
+									: ep.request.body && (
+										<PayloadSection
+											label="Body"
+											value={ep.request.body}
+											openKey={openKey + ":payload:Body"}
+											isOpenState={isOpenState}
+											toggleOpenState={toggleOpenState}
+										/>
+									)}
+								{ep.request.cookies && (
+									<div className="cookie-row cookie-row--request">
+										<span className="cookie-label">Sends</span>
+										{ep.request.cookies.map((c) => (
+											<span key={c} className="cookie-pill">{c}</span>
+										))}
+									</div>
 								)}
 							</>
 						)}

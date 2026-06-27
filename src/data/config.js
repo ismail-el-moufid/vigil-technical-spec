@@ -5,7 +5,15 @@ export const CONFIG_ENDPOINTS =
 		service: "Spring Boot",
 		owner: "Backend Lead",
 		method: "GET",
-		payload: ["Response: { api_key, ingestion_key }"],
+		request: { query: [], body: null },
+		response:
+		{
+			200: "{ api_key: '<uuid>', ingestion_key: '<uuid>' }",
+			401: "{ error: 'unauthorized' }",
+			403: "{ error: 'admin role required' }",
+			429: "{ error: 'rate limited' }",
+			500: "{ error: 'server error' }",
+		},
 		group: "Config Keys",
 		tables: [],
 		tables_actions: "None",
@@ -26,7 +34,7 @@ export const CONFIG_ENDPOINTS =
 			dedup: "None",
 		},
 		authStrategy: ["JWT", "API_KEY"],
+		requiredRole: "ADMIN",
 		id: "ep-config-keys",
 	},
 ];
-

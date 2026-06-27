@@ -1,37 +1,46 @@
 import { useState, useCallback } from "react";
 
 /**
- * Centralized open/closed registry for all collapsible sections (endpoint
- * cards, payload sections, used-by sections, nested page cards).
+ * Unified open/closed registry for all collapsible state — endpoint cards,
+ * payload sections, used-by toggles, nested page cards, and group toggles.
  *
- * Keys are plain strings built by callers — e.g.
- * "page:setup:ep:ep-auth-login:payload:Response" or
- * "ep:ep-auth-login:usedby:page:page-setup". There is no enforced schema;
- * `collapseMatching` just does a substring test, so callers own building
- * keys that (a) are unique per-instance and (b) share a recognisable
- * fragment (a page id, an endpoint id) that group-collapse can key off.
+ * Supersedes `useToggleSet`: the `ensure` function and optional `initial`
+ * seed cover everything useToggleSet did, and `collapseMatching` + `isOpen`
+ * cover what useOpenState added on top.
  *
- * @returns {[Set, (key: string) => boolean, (key: string) => void, (test: (key: string) => boolean) => void]}
- *   [openKeys, isOpen, toggle, collapseMatching]
+ * Keys are plain strings. There is no enforced schema; `collapseMatching`
+ * does a substring test, so callers own building keys that (a) are unique
+ * per-instance and (b) share a recognisable fragment (a page id, an
+ * endpoint id) that group-collapse can key off.
+ *
+ * @param {Array} initial - Optional seed keys (e.g. pre-opened groups)
+ * @returns {[Set, (key:string)=>boolean, (key:string)=>void, (key:string)=>void, (test:(key:string)=>boolean)=>void]}
+ *   [set, isOpen, toggle, ensure, collapseMatching]
  */
-export default function useOpenState()
+export default function useOpenState(initial = [])
 {
-	const [openKeys, setOpenKeys] = useState(() => new Set());
+	const [set, setSet] = useState(() => new Set(initial));
 
-	const isOpen = useCallback((key) => openKeys.has(key), [openKeys]);
+	const isOpen = useCallback((key) => set.has(key), [set]);
 
-	const toggle = useCallback((key) => setOpenKeys((prev) =>
+	const toggle = useCallback((key) => setSet((prev) =>
 	{
 		const next = new Set(prev);
 		next.has(key) ? next.delete(key) : next.add(key);
 		return next;
 	}), []);
 
+	// Adds key only if absent — safe to call repeatedly (e.g. on highlight
+	// effects that fire more than once).
+	const ensure = useCallback((key) => setSet((prev) =>
+		prev.has(key) ? prev : new Set([...prev, key])
+	), []);
+
 	// Removes every currently-open key for which `test(key)` returns true.
 	// Group-level "collapse all" buttons call this with a predicate that
 	// matches keys belonging to that group (by id substring), collapsing
 	// every open section at any nesting depth in one state update.
-	const collapseMatching = useCallback((test) => setOpenKeys((prev) =>
+	const collapseMatching = useCallback((test) => setSet((prev) =>
 	{
 		let changed = false;
 		const next = new Set(prev);
@@ -46,5 +55,5 @@ export default function useOpenState()
 		return changed ? next : prev;
 	}), []);
 
-	return [openKeys, isOpen, toggle, collapseMatching];
+	return [set, isOpen, toggle, ensure, collapseMatching];
 }

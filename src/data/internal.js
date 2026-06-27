@@ -6,14 +6,16 @@ export const INTERNAL_ENDPOINTS =
 			"Alert Engine (Spring Boot, internal port) + ClickHouse + PostgreSQL",
 		owner: "Backend Lead",
 		method: "POST",
-		payload:
-		[
-			"otlp batch: service",
-			"timestamp",
-			"severity",
-			"message",
-			"attributes",
-		],
+		request:
+		{
+			query: [],
+			body: "{ service, timestamp, severity, message, attributes }",
+		},
+		response:
+		{
+			204: "Empty response",
+			500: "{ error: 'server error' }",
+		},
 		group: "Alert Telemetry Evaluation",
 		internal: true,
 		tables: ["logs", "alert_rules", "alert_history"],
@@ -41,14 +43,16 @@ export const INTERNAL_ENDPOINTS =
 			"Alert Engine (Spring Boot, internal port) + ClickHouse + PostgreSQL",
 		owner: "Backend Lead",
 		method: "POST",
-		payload:
-		[
-			"otlp batch: service",
-			"timestamp",
-			"name",
-			"value",
-			"attributes",
-		],
+		request:
+		{
+			query: [],
+			body: "{ service, timestamp, name, value, attributes }",
+		},
+		response:
+		{
+			204: "Empty response",
+			500: "{ error: 'server error' }",
+		},
 		group: "Alert Telemetry Evaluation",
 		internal: true,
 		tables: ["metrics", "alert_rules", "alert_history"],
@@ -76,18 +80,16 @@ export const INTERNAL_ENDPOINTS =
 			"Alert Engine (Spring Boot, internal port) + ClickHouse + PostgreSQL",
 		owner: "Backend Lead",
 		method: "POST",
-		payload:
-		[
-			"otlp batch: trace_id",
-			"span_id",
-			"parent_span_id",
-			"name",
-			"service",
-			"timestamp",
-			"duration_ms",
-			"status",
-			"attributes",
-		],
+		request:
+		{
+			query: [],
+			body: "{ trace_id, span_id, parent_span_id, name, service, timestamp, duration_ms, status, attributes }",
+		},
+		response:
+		{
+			204: "Empty response",
+			500: "{ error: 'server error' }",
+		},
 		group: "Alert Telemetry Evaluation",
 		internal: true,
 		tables: ["traces", "alert_rules", "alert_history"],
@@ -114,13 +116,16 @@ export const INTERNAL_ENDPOINTS =
 		service: "FastAPI + Ollama",
 		owner: "AI Engineer",
 		method: "POST",
-		payload:
-		[
-			"alert_id",
-			"service",
-			"triggered_at",
-			"context: { logs[], metrics[], traces[] }",
-		],
+		request:
+		{
+			query: [],
+			body: "{ alert_id, service, triggered_at, context: { logs[], metrics[], traces[] } }",
+		},
+		response:
+		{
+			chunk: "data: { token: '...' }",
+			done:  "data: { done: true }",
+		},
 		group: "LLM Alert Summarization",
 		internal: true,
 		tables: [],
@@ -143,4 +148,3 @@ export const INTERNAL_ENDPOINTS =
 		id: "ep-fastapi-analyze",
 	},
 ];
-

@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
 import { PAGES } from "../data";
-import useToggleSet from "../hooks/useToggleSet.js";
 import useOpenState from "../hooks/useOpenState.js";
 import groupBy from "../utils/groupBy.js";
-import PagesGroupSection from "../components/PagesGroupSection.jsx";
+import GroupSection from "../components/GroupSection.jsx";
+import { PageCard } from "../components/EndpointComponents.jsx";
 import StatChip from "../components/ui/StatChip.jsx";
 
 /**
@@ -22,10 +22,11 @@ export default function PagesView({ highlightPageId, highlightEndpointId })
 	   openKeys,
 	   isOpenState,
 	   toggleOpenState,
+	   ,
 	   collapseMatching
 	] = useOpenState();
 
-	const [openGroups, toggleGroup, ensureGroup] = useToggleSet();
+	const [openGroups, , toggleGroup, ensureGroup] = useOpenState();
 
 	useEffect(() =>
 	{
@@ -65,22 +66,45 @@ export default function PagesView({ highlightPageId, highlightEndpointId })
 				})}
 			</div>
 
-			{[...groups].map(([group, pages]) => (
-				<PagesGroupSection
-					key={group}
-					group={group}
-					pages={pages}
-					openGroups={openGroups}
-					toggleGroup={toggleGroup}
-					open={open}
-					setOpen={setOpen}
-					isOpenState={isOpenState}
-					toggleOpenState={toggleOpenState}
-					openKeys={openKeys}
-					collapseMatching={collapseMatching}
-					highlightEndpointId={highlightEndpointId}
-				/>
-			))}
+			{[...groups].map(([group, pages]) =>
+			{
+				const pageIds = pages.map((p) => p.id);
+				const extraOpenCount = pageIds.includes(open) ? 1 : 0;
+				const onCollapseExtra = pageIds.includes(open) ? () => setOpen(null) : undefined;
+
+				return (
+					<GroupSection
+						key={group}
+						group={group}
+						items={pages}
+						openGroups={openGroups}
+						toggleGroup={toggleGroup}
+						openKeys={openKeys}
+						collapseMatching={collapseMatching}
+						extraOpenCount={extraOpenCount}
+						onCollapseExtra={onCollapseExtra}
+					>
+						{pages.map((page) =>
+						{
+							const isPageOpen = open === page.id;
+							return (
+								<PageCard
+									key={page.id}
+									page={page}
+									isOpen={isPageOpen}
+									onToggle={() => setOpen(isPageOpen ? null : page.id)}
+									keyPrefix={"page:" + page.id}
+									isOpenState={isOpenState}
+									toggleOpenState={toggleOpenState}
+									highlightEndpointId={highlightEndpointId}
+									openKeys={openKeys}
+									collapseMatching={collapseMatching}
+								/>
+							);
+						})}
+					</GroupSection>
+				);
+			})}
 		</div>
 	);
 }

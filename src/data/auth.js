@@ -5,7 +5,26 @@ export const AUTH_ENDPOINTS =
 		service: "Spring Boot + PostgreSQL",
 		owner: "Backend Lead",
 		method: "POST",
-		payload: ["email", "password"],
+		request:
+		{
+			query: [],
+			body:
+			[
+				{ name: "email",    type: "string", required: true },
+				{ name: "password", type: "string", required: true },
+			],
+			cookies: null,
+		},
+		response:
+		{
+			201: {
+				body: "{ role: admin | viewer }",
+				cookies: ["access_token", "refresh_token"]
+			},
+			400: "{ error: '<validation message>' }",
+			429: "{ error: 'rate limited' }",
+			500: "{ error: 'server error' }",
+		},
 		group: "Auth",
 		tables: ["users"],
 		tables_actions: "Insert",
@@ -29,7 +48,26 @@ export const AUTH_ENDPOINTS =
 		service: "Spring Boot + PostgreSQL",
 		owner: "Backend Lead",
 		method: "POST",
-		payload: ["email", "password"],
+		request:
+		{
+			query: [],
+			body:
+			[
+				{ name: "email",    type: "string", required: true },
+				{ name: "password", type: "string", required: true },
+			],
+			cookies: null,
+		},
+		response:
+		{
+			200: {
+			   body: "{ role: admin | viewer }",
+			   cookies: ["access_token", "refresh_token"]
+			},
+			401: "{ error: 'unauthorized' }",
+			429: "{ error: 'rate limited' }",
+			500: "{ error: 'server error' }",
+		},
 		group: "Auth",
 		tables: ["users"],
 		tables_actions: "Read",
@@ -49,7 +87,19 @@ export const AUTH_ENDPOINTS =
 		service: "Spring Boot + PostgreSQL",
 		owner: "Backend Lead",
 		method: "POST",
-		payload: ["httpOnly cookie: refresh token"],
+		request:
+		{
+			query: [],
+			body: null,
+			cookies: ["refresh_token"],
+		},
+		response:
+		{
+			204: { body: null, cookies: ["access_token"] },
+			401: "{ error: 'unauthorized' }",
+			429: "{ error: 'rate limited' }",
+			500: "{ error: 'server error' }",
+		},
 		group: "Auth",
 		tables: ["users"],
 		tables_actions: "Read",
@@ -72,7 +122,19 @@ export const AUTH_ENDPOINTS =
 		service: "Spring Boot + PostgreSQL",
 		owner: "Backend Lead",
 		method: "POST",
-		payload: ["httpOnly cookie: refresh token"],
+		request:
+		{
+			query: [],
+			body: null,
+			cookies: ["refresh_token"],
+		},
+		response:
+		{
+			204: { body: null, clears: ["access_token", "refresh_token"] },
+			401: "{ error: 'unauthorized' }",
+			429: "{ error: 'rate limited' }",
+			500: "{ error: 'server error' }",
+		},
 		group: "Auth",
 		tables: ["users"],
 		tables_actions: "Update",

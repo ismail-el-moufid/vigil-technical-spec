@@ -1,8 +1,9 @@
 import { useCallback, useMemo } from "react";
 import useBorderSpotlight from "../hooks/useBorderSpotlight.js";
 import groupBy from "../utils/groupBy.js";
-import MetaGroupHeader from "./ui/MetaGroupHeader.jsx";
+import GroupHeader from "./ui/GroupHeader.jsx";
 import GroupSection from "./GroupSection.jsx";
+import { EndpointCard } from "./EndpointComponents.jsx";
 
 /**
  * MetaGroupSection - A meta group section with border spotlight.
@@ -54,17 +55,15 @@ export default function MetaGroupSection({
 		// Collapse all open keys (endpoint cards, payload sections, etc.)
 		collapseMatching(belongsToMeta);
 		// Also collapse any open groups within this meta group.
-		groupNames.forEach((g) => 
+		groupNames.forEach((g) =>
 		{
-			if (openGroups.has(g)) toggleGroup(g); 
+			if (openGroups.has(g)) toggleGroup(g);
 		});
 	}
 
 	// Whitelist: legend (header), the wrapper's own padding, or the bare
 	// fieldset (border) only — see GroupSection.jsx for why a blacklist on
-	// `.collapsible` isn't safe here (nested GroupSections have their own
-	// headers outside their own `.collapsible`, which would otherwise
-	// wrongly bubble into a toggle).
+	// `.collapsible` isn't safe here.
 	function handleFieldsetClick(e)
 	{
 		if (e.target.closest(".group-hd-collapse-btn")) return;
@@ -82,7 +81,8 @@ export default function MetaGroupSection({
 	return (
 		<div className="meta-group-wrap" onClick={handleFieldsetClick}>
 			<fieldset ref={ref} className="meta-group">
-				<MetaGroupHeader
+				<GroupHeader
+					variant="meta"
 					label={meta}
 					count={eps.length}
 					collapsed={!isOpen}
@@ -95,15 +95,25 @@ export default function MetaGroupSection({
 							<GroupSection
 								key={group}
 								group={group}
-								groupEps={groupEps}
+								items={groupEps}
 								openGroups={openGroups}
 								toggleGroup={toggleGroup}
-								isOpenState={isOpenState}
-								toggleOpenState={toggleOpenState}
 								openKeys={openKeys}
 								collapseMatching={collapseMatching}
-								highlightId={highlightId}
-							/>
+							>
+								{groupEps.map((ep) => (
+									<EndpointCard
+										key={ep.id}
+										ep={ep}
+										openKey={"ep:" + ep.id}
+										isOpenState={isOpenState}
+										toggleOpenState={toggleOpenState}
+										highlighted={highlightId === ep.id}
+										openKeys={openKeys}
+										collapseMatching={collapseMatching}
+									/>
+								))}
+							</GroupSection>
 						))}
 					</div>
 				</div>
