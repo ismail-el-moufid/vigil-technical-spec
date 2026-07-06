@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from "react";
 import useBorderSpotlight from "../hooks/useBorderSpotlight.js";
+import { useCollapseHotkey } from "../hooks/useCollapseHotkeys.jsx";
 import groupBy from "../utils/groupBy.js";
 import GroupHeader from "./ui/GroupHeader.jsx";
 import GroupSection from "./GroupSection.jsx";
@@ -61,6 +62,15 @@ export default function MetaGroupSection({
 		});
 	}
 
+	// Hotkey collapse mirrors click-to-toggle: closing a meta group also
+	// collapses everything nested inside it first.
+	function handleHotkeyCollapse()
+	{
+		handleCollapseAll();
+		onToggle();
+	}
+	const hotkeyNumber = useCollapseHotkey(isOpen, handleHotkeyCollapse);
+
 	// Whitelist: legend (header), the wrapper's own padding, or the bare
 	// fieldset (border) only — see GroupSection.jsx for why a blacklist on
 	// `.collapsible` isn't safe here.
@@ -88,6 +98,7 @@ export default function MetaGroupSection({
 					collapsed={!isOpen}
 					onCollapseAll={handleCollapseAll}
 					collapseAllActive={isOpen && openCount >= 2}
+					hotkeyNumber={hotkeyNumber}
 				/>
 				<div className={"collapsible" + (isOpen ? " collapsible--open" : "")}>
 					<div className="collapsible-inner">

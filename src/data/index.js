@@ -20,6 +20,7 @@ export { WEBHOOKS_ENDPOINTS }   from "./webhooks.js";
 export { AI_ENDPOINTS }         from "./ai.js";
 export { INTERNAL_ENDPOINTS }   from "./internal.js";
 export { PAGES }                from "./pages.js";
+export { SCHEMA }               from "./schema.js";
 
 export const ENDPOINTS =
 [

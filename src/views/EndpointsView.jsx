@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
 import { ENDPOINTS } from "../data";
 import useOpenState from "../hooks/useOpenState.js";
+import { HotkeyScope } from "../hooks/useCollapseHotkeys.jsx";
 import MetaGroupSection from "../components/MetaGroupSection.jsx";
 import SecurityLayer from "../components/SecurityLayer.jsx";
-import StatChip from "../components/ui/StatChip.jsx";
 
 /**
  * EndpointsView displays all endpoints grouped by visibility and logical groups.
@@ -23,14 +23,83 @@ export default function EndpointsView({ highlightId })
 	const initialGroup = highlightId
 		? ENDPOINTS.find((e) => e.id === highlightId)?.group
 		: null;
-	const [openGroups, , toggleGroup, ensureGroup] = useOpenState(
+	const [openGroups, , toggleGroup, ensureGroup, collapseGroups] = useOpenState(
 		initialGroup ? [initialGroup] : []
 	);
-	const [openMetaGroups, , toggleMetaGroup, ensureMetaGroup] = useOpenState([
+	const [openMetaGroups, , toggleMetaGroup, ensureMetaGroup, collapseMetaGroups] = useOpenState([
 		"External Facing",
 		"Internal Facing",
 	]);
 	const [secOpen, setSecOpen] = useState(true);
+
+	// --- Global collapse shortcuts ---------------------------------------
+	// Esc            - "step" collapse: closes every currently-open item at
+	//                   the deepest open level, then walks up one level per
+	//                   press (payload frames -> card attrs -> cards ->
+	//                   groups -> meta groups -> security layer).
+	// Shift+Esc      - collapses absolutely everything in one press.
+	//
+	// Depth model: meta groups and the security layer sit at depth 0, groups
+	// at depth 1, and every openKeys entry at depth (1 + colon count) — since
+	// every child key in this codebase is built as `parentKey + ":" + suffix`,
+	// colon count already encodes nesting depth, so no separate bookkeeping
+	// is needed to know how deep a given key lives. Because we always act on
+	// *every* item sharing the current max depth (not just one), this also
+	// covers multiple things open at the same level across different groups
+	// or meta groups in a single press.
+	function collectOpenItems()
+	{
+		const items = [];
+		if (secOpen) items.push({ type: "sec", depth: 0 });
+		for (const key of openMetaGroups) items.push({ type: "meta", key, depth: 0 });
+		for (const key of openGroups) items.push({ type: "group", key, depth: 1 });
+		for (const key of openKeys)
+		{
+			const depth = 1 + (key.split(":").length - 1);
+			items.push({ type: "key", key, depth });
+		}
+		return items;
+	}
+
+	function collapseStep()
+	{
+		const items = collectOpenItems();
+		if (items.length === 0) return;
+		const maxDepth = Math.max(...items.map((i) => i.depth));
+		const atMax = items.filter((i) => i.depth === maxDepth);
+
+		if (atMax.some((i) => i.type === "sec")) setSecOpen(false);
+		const metaKeys = new Set(atMax.filter((i) => i.type === "meta").map((i) => i.key));
+		if (metaKeys.size) collapseMetaGroups((k) => metaKeys.has(k));
+		const groupKeys = new Set(atMax.filter((i) => i.type === "group").map((i) => i.key));
+		if (groupKeys.size) collapseGroups((k) => groupKeys.has(k));
+		const plainKeys = new Set(atMax.filter((i) => i.type === "key").map((i) => i.key));
+		if (plainKeys.size) collapseMatching((k) => plainKeys.has(k));
+	}
+
+	function collapseAll()
+	{
+		setSecOpen(false);
+		collapseMetaGroups(() => true);
+		collapseGroups(() => true);
+		collapseMatching(() => true);
+	}
+
+	useEffect(() =>
+	{
+		function handleKeyDown(e)
+		{
+			if (e.key !== "Escape") return;
+			const tag = document.activeElement?.tagName;
+			if (tag === "INPUT" || tag === "TEXTAREA") return;
+			e.preventDefault();
+			if (e.shiftKey) collapseAll();
+			else collapseStep();
+		}
+		window.addEventListener("keydown", handleKeyDown);
+		return () => window.removeEventListener("keydown", handleKeyDown);
+	// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [openKeys, openGroups, openMetaGroups, secOpen]);
 
 	const external = ENDPOINTS.filter((ep) => !ep.internal);
 	const internal = ENDPOINTS.filter((ep) => ep.internal);
@@ -103,49 +172,36 @@ export default function EndpointsView({ highlightId })
 			<div className="panel-title">Endpoints</div>
 			<div className="panel-sub">
 				{ENDPOINTS.length} total across all services
+				<span className="panel-sub-shortcuts">
+					<kbd>Esc</kbd> collapse one level · <kbd>Shift</kbd>+<kbd>Esc</kbd> collapse all · <kbd>1</kbd>-<kbd>9</kbd> collapse item
+				</span>
 			</div>
 
-			<div className="stat-row">
-				<StatChip
-					num={ENDPOINTS.length}
-					label="Total"
-					colorClass="color--get"
-				/>
-				<StatChip
-					num={external.length}
-					label="External"
-					colorClass="color--ext"
-				/>
-				<StatChip
-					num={internal.length}
-					label="Internal"
-					colorClass="color--int"
-				/>
-			</div>
+			<HotkeyScope>
+				{/* Infrastructure Security Layer, applies to ALL endpoints */}
+				<SecurityLayer open={secOpen} onToggle={() => setSecOpen((o) => !o)} />
 
-			{/* Infrastructure Security Layer, applies to ALL endpoints */}
-			<SecurityLayer open={secOpen} onToggle={() => setSecOpen((o) => !o)} />
-
-			{metaGroups.map(([meta, eps]) =>
-			{
-				const isMetaOpen = openMetaGroups.has(meta);
-				return (
-					<MetaGroupSection
-						key={meta}
-						meta={meta}
-						eps={eps}
-						isOpen={isMetaOpen}
-						onToggle={() => toggleMetaGroup(meta)}
-						openGroups={openGroups}
-						toggleGroup={toggleGroup}
-						isOpenState={isOpenState}
-						toggleOpenState={toggleOpenState}
-						openKeys={openKeys}
-						collapseMatching={collapseMatching}
-						highlightId={highlightId}
-					/>
-				);
-			})}
+				{metaGroups.map(([meta, eps]) =>
+				{
+					const isMetaOpen = openMetaGroups.has(meta);
+					return (
+						<MetaGroupSection
+							key={meta}
+							meta={meta}
+							eps={eps}
+							isOpen={isMetaOpen}
+							onToggle={() => toggleMetaGroup(meta)}
+							openGroups={openGroups}
+							toggleGroup={toggleGroup}
+							isOpenState={isOpenState}
+							toggleOpenState={toggleOpenState}
+							openKeys={openKeys}
+							collapseMatching={collapseMatching}
+							highlightId={highlightId}
+						/>
+					);
+				})}
+			</HotkeyScope>
 		</div>
 	);
 }

@@ -41,7 +41,7 @@ export const TELEMETRY_ENDPOINTS =
 			dedup: "None",
 		},
 		authStrategy: ["JWT", "API_KEY"],
-		requiredRole: "ANY_AUTH",
+		requiredRole: "ADMIN_/_VIEWER",
 		id: "ep-telemetry-metrics",
 	},
 	{
@@ -85,7 +85,7 @@ export const TELEMETRY_ENDPOINTS =
 			dedup: "None",
 		},
 		authStrategy: ["JWT", "API_KEY"],
-		requiredRole: "ANY_AUTH",
+		requiredRole: "ADMIN_/_VIEWER",
 		id: "ep-telemetry-traces",
 	},
 	{
@@ -132,7 +132,7 @@ export const TELEMETRY_ENDPOINTS =
 			dedup: "None",
 		},
 		authStrategy: ["JWT", "API_KEY"],
-		requiredRole: "ANY_AUTH",
+		requiredRole: "ADMIN_/_VIEWER",
 		id: "ep-telemetry-logs",
 	},
 	{
@@ -169,7 +169,7 @@ export const TELEMETRY_ENDPOINTS =
 			dedup: "None",
 		},
 		authStrategy: ["JWT", "API_KEY"],
-		requiredRole: "ANY_AUTH",
+		requiredRole: "ADMIN_/_VIEWER",
 		id: "ep-telemetry-logs-live",
 	},
 	{
@@ -206,7 +206,7 @@ export const TELEMETRY_ENDPOINTS =
 			dedup: "None",
 		},
 		authStrategy: ["JWT", "API_KEY"],
-		requiredRole: "ANY_AUTH",
+		requiredRole: "ADMIN_/_VIEWER",
 		id: "ep-telemetry-traces-live",
 	},
 	{
@@ -243,7 +243,7 @@ export const TELEMETRY_ENDPOINTS =
 			dedup: "None",
 		},
 		authStrategy: ["JWT", "API_KEY"],
-		requiredRole: "ANY_AUTH",
+		requiredRole: "ADMIN_/_VIEWER",
 		id: "ep-telemetry-metrics-live",
 	},
 	{
@@ -271,7 +271,7 @@ export const TELEMETRY_ENDPOINTS =
 			dedup: "None",
 		},
 		authStrategy: ["JWT", "API_KEY"],
-		requiredRole: "ANY_AUTH",
+		requiredRole: "ADMIN_/_VIEWER",
 		id: "ep-telemetry-attributes",
 	},
 ];

@@ -12,30 +12,38 @@
  * `.group-hd-collapse-btn` is explicitly excluded from that whitelist so
  * the collapse-all button never accidentally fires the toggle too.
  */
+import CollapseToggle from "./CollapseToggle.jsx";
+
 export default function GroupHeader({
 	label,
 	count,
 	collapsed,
 	onCollapseAll,
 	collapseAllActive,
+	hdRef,
 	variant = "group",
+	hotkeyNumber,
 })
 {
 	const isMeta = variant === "meta";
 
 	return (
-		<legend className={isMeta
-			? "meta-group-hd meta-group-hd--" + label.toLowerCase()
-			: "group-hd"}
+		<legend
+			ref={hdRef}
+			className={isMeta
+				? "meta-group-hd meta-group-hd--" + label.toLowerCase()
+				: "group-hd"}
 		>
 			{isMeta && <span className={label.toLowerCase()} />}
 			<span className={isMeta ? "meta-group-label-wrap" : "group-hd-label-wrap"}>
 				<span className={isMeta ? "meta-group-label" : "group-hd-label"}>{label}</span>
 				<span className={isMeta ? "meta-group-count" : "group-hd-count"}>{count}</span>
 			</span>
-			<span className={isMeta ? "meta-group-toggle" : "group-hd-toggle"}>
-				{collapsed ? "→" : "↓"}
-			</span>
+			<CollapseToggle
+				collapsed={collapsed}
+				hotkeyNumber={hotkeyNumber}
+				className={isMeta ? "meta-group-toggle" : "group-hd-toggle"}
+			/>
 			<button
 				type="button"
 				className="group-hd-collapse-btn"

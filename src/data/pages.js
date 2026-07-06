@@ -1,11 +1,16 @@
 // ─── PAGES ────────────────────────────────────────────────────────────────
+// Every authenticated page renders a persistent header (profile icon, sign
+// out) except Settings, which exposes account controls directly instead —
+// that's why ep-auth-logout shows up on every page below except page-settings,
+// the same distribution ep-alerts-ws already follows for the header's live
+// alert bell (Settings included there, since that one isn't redundant there).
 
 export const PAGES =
 [
 	{
 		name: "Setup",
 		path: "/setup",
-		desc: "First-boot admin account creation. Only accessible if zero users exist.",
+		desc: "First-boot admin account creation, shown only before any user exists. Enforcement lives server-side",
 		role: "Frontend Lead",
 		group: "Auth",
 		endpointIds: ["ep-auth-setup"],
@@ -21,7 +26,6 @@ export const PAGES =
 		[
 			"ep-auth-login",
 			"ep-auth-refresh",
-			"ep-auth-logout",
 		],
 		id: "page-login",
 	},
@@ -41,6 +45,7 @@ export const PAGES =
 			"ep-telemetry-traces-live",
 			"ep-telemetry-metrics-live",
 			"ep-llm-analyze",
+			"ep-auth-logout",
 		],
 		id: "page-overview",
 	},
@@ -55,6 +60,7 @@ export const PAGES =
 			"ep-alerts-ws",
 			"ep-telemetry-logs",
 			"ep-telemetry-logs-live",
+			"ep-auth-logout",
 		],
 		id: "page-logs",
 	},
@@ -69,6 +75,7 @@ export const PAGES =
 			"ep-alerts-ws",
 			"ep-telemetry-traces",
 			"ep-telemetry-traces-live",
+			"ep-auth-logout",
 		],
 		id: "page-traces",
 	},
@@ -83,6 +90,7 @@ export const PAGES =
 			"ep-alerts-ws",
 			"ep-telemetry-metrics",
 			"ep-telemetry-metrics-live",
+			"ep-auth-logout",
 		],
 		id: "page-metrics",
 	},
@@ -101,6 +109,7 @@ export const PAGES =
 			"ep-alert-rules-update",
 			"ep-alert-rules-delete",
 			"ep-telemetry-attributes",
+			"ep-auth-logout",
 		],
 		id: "page-alerts",
 	},
@@ -110,7 +119,7 @@ export const PAGES =
 		desc: "Full-page streaming chat. Frontend maintains full conversation history between turns.",
 		role: "Frontend Lead + AI Engineer",
 		group: "AI",
-		endpointIds: ["ep-alerts-ws", "ep-llm-analyze"],
+		endpointIds: ["ep-alerts-ws", "ep-llm-analyze", "ep-auth-logout"],
 		id: "page-ai",
 	},
 	{
@@ -118,7 +127,7 @@ export const PAGES =
 		name: "Settings",
 		path: "/settings",
 		role: "Frontend Lead + Backend Lead",
-		desc: "User CRUD, role management, webhook management, and read-only display of the startup-generated API key and ingestion key (sourced from Spring Boot @ConfigurationProperties — see GET /api/config/keys). Config export is client-side: fetches alert rules and webhooks via existing GETs and downloads as JSON. Import iterates existing POST endpoints with the imported payload.",
+		desc: "User CRUD, role management, webhook management, and read-only display of the startup-generated API key and ingestion key (sourced from Spring Boot @ConfigurationProperties — see GET /api/config/keys). Config export is client-side: fetches alert rules and webhooks via existing GETs and downloads as JSON. Import iterates existing POST endpoints with the imported payload. Session management section lists all active sessions for the current user (device, IP, last active) with per-session revoke; the calling session is flagged as current.",
 		endpointIds:
 		[
 			"ep-alerts-ws",
@@ -132,6 +141,8 @@ export const PAGES =
 			"ep-webhooks-create",
 			"ep-webhooks-delete",
 			"ep-telemetry-attributes",
+			"ep-auth-sessions-list",
+			"ep-auth-sessions-revoke",
 		],
 		id: "page-settings",
 	},
@@ -141,7 +152,7 @@ export const PAGES =
 		path: "/status",
 		role: "Frontend Lead + Telemetry Engineer + Platform Engineer",
 		desc: "Infrastructure health page. Calls /api/telemetry/metrics twice: once without filter for service health panels, once with ?vigil.internal=true for infrastructure gauges. Dual-call is intentional — two distinct data sets feed two distinct UI sections.",
-		endpointIds: ["ep-alerts-ws", "ep-telemetry-metrics"],
+		endpointIds: ["ep-alerts-ws", "ep-telemetry-metrics", "ep-auth-logout"],
 		id: "page-status",
 	},
 	{

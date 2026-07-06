@@ -6,7 +6,7 @@ export const AUTH_STRATEGIES =
 	PERMIT_ALL: {
 		id: "gw-strat-permit-all",
 		tag: "PERMIT ALL",
-		tagType: "crit",
+		tagType: "permit",
 		label: "No auth: SecurityConfig.permitAll()",
 		items:
 		[
@@ -19,10 +19,11 @@ export const AUTH_STRATEGIES =
 		label: "Authorization: Bearer <access_token>",
 		items:
 		[
-			"Short-lived",
-			"Expires with a 401; refresh via /api/auth/refresh reissues current claims",
-			"AuthFilter validates signature and expiry, then sets the SecurityContext principal",
-			"Refresh re-validates the user against `users` and reissues current claims — claims in a live access token may lag DB state until the next refresh; privileged writes should re-check role at request time rather than trust the token's claim",
+			"Short-lived; frontend holds it in memory only — never written to a cookie or localStorage, so it can't be read by an XSS payload",
+			"Lost on hard refresh — this is the expected missing-token case; the boot guard calls /api/auth/refresh on every page load and falls back to /login or /setup on 401",
+			"AuthFilter validates signature and expiry only, then sets the SecurityContext principal — no DB hit on every request",
+			"On expiry the next API call returns 401; frontend calls /api/auth/refresh which validates the refresh_token cookie against the refresh_tokens table, rotates the row, and reissues a new access token and refresh cookie",
+			"Claims in a live access token are explicitly designed to lag DB state until the next refresh — the tradeoff for no DB hit on every request; privileged writes (admin endpoints) re-check role at request time rather than trust the token's claim",
 		],
 	},
 	API_KEY: {
@@ -155,7 +156,7 @@ export const ROLE_ENFORCEMENT_INFO =
 			],
 		},
 		{
-			tag: "ANY AUTH",
+			tag: "ADMIN / VIEWER",
 			tagType: "crit",
 			label: "Any authenticated caller — JWT or API key, any role",
 			items:
@@ -163,6 +164,12 @@ export const ROLE_ENFORCEMENT_INFO =
 				"All telemetry reads · GET /api/webhooks · PUT /api/users/me",
 				"POST /api/llm/analyze · all SSE streams",
 			],
+		},
+		{
+			tag: "NO AUTH",
+			tagType: "permit",
+			label: "No authentication required — permitAll()",
+			items: [],
 		},
 	],
 };

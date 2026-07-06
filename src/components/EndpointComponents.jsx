@@ -1,15 +1,65 @@
-import { useState, useMemo, useCallback } from "react";
+import { useMemo, useCallback } from "react";
 import { ENDPOINTS, PAGES, AUTH_STRATEGIES, ROLE_ENFORCEMENT_INFO } from "../data";
 import Badge from "./ui/Badge.jsx";
 import RolePill from "./ui/RolePill.jsx";
+import TablesRow from "./TablesRow.jsx";
 import useMaskSpotlight from "../hooks/useMaskSpotlight.js";
+import { useCollapseHotkey } from "../hooks/useCollapseHotkeys.jsx";
+import CollapseToggle from "./ui/CollapseToggle.jsx";
 
 const CONSTRAINT_CONFIG =
 [
-	{ key: "realtime", tag: "RT", type: "realtime", skip: (v) => v === "None" },
+	{ key: "realtime", tag: "RT",   type: "realtime", skip: (v) => v === "None" },
 	{ key: "fallback", tag: "FALL", type: "fallback", skip: (v) => v === "None" },
-	{ key: "dedup", tag: "DEDUP", type: "dedup", skip: (v) => v === "None" },
+	{ key: "dedup",    tag: "DEDUP",type: "dedup",    skip: (v) => v === "None" },
+	{
+	   key: "rateLimit",
+	   tag: "RATE",
+	   type: "rate",
+	   skip: (v) => !v || v === "N/A" || v === "Not rate limited"
+	},
 ];
+
+// id -> route lookup so cookie attributes can reference an endpoint instead
+// of duplicating its path as a literal string that could drift out of sync.
+const ROUTE_BY_ID = Object.fromEntries(ENDPOINTS.map((e) => [e.id, e.route]));
+
+// Turns a cookie attribute object (httpOnly/secure/sameSite/pathEndpointId/
+// maxAge) into the list of short labels shown under its pill, in Set-Cookie
+// order. pathEndpointId is resolved against ROUTE_BY_ID so the displayed
+// Path= always matches that endpoint's actual route.
+function cookieAttrList(c)
+{
+	const out = [];
+	if (c.httpOnly) out.push("HttpOnly");
+	if (c.secure) out.push("Secure");
+	if (c.sameSite) out.push(`SameSite=${c.sameSite}`);
+	if (c.pathEndpointId)
+	{
+		const route = ROUTE_BY_ID[c.pathEndpointId];
+		out.push(`Path=${route ?? `<unknown endpoint id: ${c.pathEndpointId}>`}`);
+	}
+	if (c.maxAge) out.push(`Max-Age=${c.maxAge}`);
+	if (c.note) out.push(c.note);
+	return out;
+}
+
+// Shared renderer for a single cookie entry in both Sets and Clears rows.
+// entry: string | { name, note?, ...setAttrs }
+// clears: bool — applies the --clears modifier to the pill
+function CookieEntry({ entry, clears = false })
+{
+	const name  = typeof entry === "string" ? entry : entry.name;
+	const attrs = typeof entry === "string" ? null : cookieAttrList(entry);
+	return (
+		<span key={name} className="cookie-entry">
+			<span className={"cookie-pill" + (clears ? " cookie-pill--clears" : "")}>{name}</span>
+			{attrs && attrs.length > 0 && (
+				<span className="cookie-attrs">{attrs.join(" · ")}</span>
+			)}
+		</span>
+	);
+}
 
 // Pretty-prints the loose shorthand shape strings used for request/response
 // (e.g. "{ id, preset, service: a | b, custom?: x }") with indentation and
@@ -142,75 +192,64 @@ function formatShape(str)
 	}
 }
 
-function AuthStrategyRow({ ep })
+// AccessRow merges Auth Strategy + Required Role into a single "Access" grid row.
+// Auth strategy pills expand inline (single-open, panel in a shared wrapper below).
+// The role pill sits beside the strategy pills as a non-expandable tag.
+function AccessRow({ ep, openKey, isOpenState, toggleOpenState })
 {
-	const [open, setOpen] = useState(null);
-	const strats = (ep.authStrategy || [])
-		.map((k) => AUTH_STRATEGIES[k])
-		.filter(Boolean);
-	if (!strats.length) return null;
+	const strats   = (ep.authStrategy || []).map((k) => AUTH_STRATEGIES[k]).filter(Boolean);
+	const roleInfo = ep.requiredRole && ROLE_INFO_BY_KEY[ep.requiredRole];
+	if (!strats.length && !roleInfo) return null;
 
-	const activeStrat = strats.find((s) => s.id === open);
+	const openStratId = strats.find((s) => isOpenState(openKey + ":auth:" + s.id))?.id ?? null;
 
 	return (
 		<>
-			<span className="meta-label meta-label--auth">Auth Strategy</span>
+			<span className="meta-label meta-label--auth">Access</span>
 			<span className="meta-value meta-value--auth">
 				{strats.map((s) => (
 					<button
 						key={s.id}
-						className={"auth-strat-pill constraint-tag--" + s.tagType + (open === s.id ? " auth-strat-pill--open" : "")}
-						onClick={() => setOpen((o) => (o === s.id ? null : s.id))}
+						className={"auth-strat-pill constraint-tag--" + s.tagType + (openStratId === s.id ? " auth-strat-pill--open" : "")}
+						onClick={() => toggleOpenState(openKey + ":auth:" + s.id)}
 					>
 						{s.tag}{" "}
 						<span className="auth-strat-pill-chevron">
-							{open === s.id ? "▲" : "▼"}
+							{openStratId === s.id ? "▲" : "▼"}
 						</span>
 					</button>
 				))}
+				{roleInfo && (
+					<span className={"constraint-tag constraint-tag--" + roleInfo.tagType}>
+						{roleInfo.tag}
+					</span>
+				)}
 			</span>
-			{activeStrat && (
-				<>
-					<span />
-					<div className="auth-strat-inline">
-						<div className="auth-strat-inline-label">{activeStrat.label}</div>
-						{activeStrat.items.map((item, i) => (
-							<div className="gw-row-item" key={i}>
-								<span className="gw-row-dot">·</span>
-								<span className="constraint-text">{item}</span>
-							</div>
-						))}
+			{/* Single wrapper — avoids multiplying grid gap by strat count */}
+			<div style={{ gridColumn: "1 / -1" }}>
+				{strats.map((s) => (
+					<div key={s.id} className={"collapsible" + (openStratId === s.id ? " collapsible--open" : "")}>
+						<div className="collapsible-inner auth-strat-inline">
+							<div className="auth-strat-inline-label">{s.label}</div>
+							{s.items.map((item, i) => (
+								<div className="gw-row-item" key={i}>
+									<span className="gw-row-dot">·</span>
+									<span className="constraint-text">{item}</span>
+								</div>
+							))}
+						</div>
 					</div>
-				</>
-			)}
+				))}
+			</div>
 		</>
 	);
 }
 
-// "ADMIN" / "ANY_AUTH" (the values endpoints store) -> the matching role entry
-// in ROLE_ENFORCEMENT_INFO, by normalizing "ANY AUTH" -> "ANY_AUTH". Pulling
-// the tag text + tagType from there means the color/label only ever lives
-// in one place — gateway.js — same fix as requiredRole itself.
+// Normalises role tag strings ("ANY AUTH" → "ANY_AUTH") to look up
+// ROLE_ENFORCEMENT_INFO entries. Used by AccessRow.
 const ROLE_INFO_BY_KEY = Object.fromEntries(
 	ROLE_ENFORCEMENT_INFO.roles.map((r) => [r.tag.replace(/\s+/g, "_"), r]),
 );
-
-function RequiredRoleRow({ ep })
-{
-	const info = ep.requiredRole && ROLE_INFO_BY_KEY[ep.requiredRole];
-	if (!info) return null;
-
-	return (
-		<>
-			<span className="meta-label meta-label--auth">Required Role</span>
-			<span className="meta-value meta-value--auth">
-				<span className={"constraint-tag constraint-tag--" + info.tagType}>
-					{info.tag}
-				</span>
-			</span>
-		</>
-	);
-}
 
 // ConstraintSection receives isOpenState/toggleOpenState and a usedByKey
 // (built by the parent EndpointCard as openKey + ":usedby").
@@ -254,6 +293,8 @@ function ConstraintSection({
 		collapseMatching(belongsToUsedBy);
 	}
 
+	const usedByHotkeyNumber = useCollapseHotkey(usedByOpen, () => toggleOpenState(usedByKey));
+
 	const rows =
 	[
 		...CONSTRAINT_CONFIG.filter(({ key, skip }) => !skip(constraints[key])).map(
@@ -282,6 +323,7 @@ function ConstraintSection({
 						onClick={() => toggleOpenState(usedByKey)}
 					>
 						Used by pages ({pages.length})
+						<CollapseToggle collapsed={!usedByOpen} hotkeyNumber={usedByHotkeyNumber} className="ep-toggle" />
 						<button
 							type="button"
 							className="group-hd-collapse-btn ep-section-collapse-btn"
@@ -340,6 +382,7 @@ function ShapeFrame({ frame, shape, frameKey, isOpenState, toggleOpenState })
 {
 	const frameOpen = isOpenState(frameKey);
 	const ref = useMaskSpotlight(frameOpen, { border: false });
+	const hotkeyNumber = useCollapseHotkey(frameOpen, () => toggleOpenState(frameKey));
 	const isCookieShape = shape !== null && typeof shape === "object" && ("body" in shape || "cookies" in shape || "clears" in shape);
 	return (
 		<div ref={ref} className="shape-frame spot">
@@ -348,6 +391,7 @@ function ShapeFrame({ frame, shape, frameKey, isOpenState, toggleOpenState })
 				onClick={() => toggleOpenState(frameKey)}
 			>
 				{frame}
+				<CollapseToggle collapsed={!frameOpen} hotkeyNumber={hotkeyNumber} className="ep-toggle" />
 			</div>
 			<div className={"collapsible" + (frameOpen ? " collapsible--open" : "")}>
 				<div className="collapsible-inner shape-frame-body">
@@ -358,7 +402,7 @@ function ShapeFrame({ frame, shape, frameKey, isOpenState, toggleOpenState })
 								<div className="cookie-row">
 									<span className="cookie-label">Sets</span>
 									{shape.cookies.map((c) => (
-										<span key={c} className="cookie-pill">{c}</span>
+										<CookieEntry key={typeof c === "string" ? c : c.name} entry={c} />
 									))}
 								</div>
 							)}
@@ -366,7 +410,7 @@ function ShapeFrame({ frame, shape, frameKey, isOpenState, toggleOpenState })
 								<div className="cookie-row">
 									<span className="cookie-label">Clears</span>
 									{shape.clears.map((c) => (
-										<span key={c} className="cookie-pill cookie-pill--clears">{c}</span>
+										<CookieEntry key={typeof c === "string" ? c : c.name} entry={c} clears />
 									))}
 								</div>
 							)}
@@ -383,11 +427,27 @@ function ShapeFrame({ frame, shape, frameKey, isOpenState, toggleOpenState })
 // so a group-level "collapse all" can reach it without lifting state manually.
 // When value is an object (multi-frame), each frame is individually collapsible
 // via its own registry key, collapsed by default.
-function PayloadSection({ label, value, openKey, isOpenState, toggleOpenState })
+function PayloadSection({ label, value, openKey, isOpenState, toggleOpenState, openKeys, collapseMatching })
 {
 	const open = isOpenState(openKey);
 	const ref = useMaskSpotlight(open, { border: false });
-	const frameCount = typeof value === "string" ? 1 : Object.keys(value).length;
+	const hotkeyNumber = useCollapseHotkey(open, () => toggleOpenState(openKey));
+	const isMultiFrame = typeof value !== "string";
+	const frameCount = isMultiFrame ? Object.keys(value).length : 1;
+
+	// Collapse-all only applies to multi-frame payloads (WS request/response
+	// shapes) — each frame is its own registry key (openKey + ":frame:" + name).
+	// Only shown once the section is open AND at least 2 frames are open —
+	// with 0 or 1 there's nothing meaningful to collapse "all" of.
+	const framesPrefix = openKey + ":frame:";
+	const belongsToFrames = (key) => key.startsWith(framesPrefix);
+	const framesOpenCount = isMultiFrame && openKeys ? [...openKeys].filter(belongsToFrames).length : 0;
+
+	function handleCollapseAllFrames(e)
+	{
+		e.stopPropagation();
+		collapseMatching(belongsToFrames);
+	}
 
 	return (
 		<div ref={ref} className="payload-section spot">
@@ -396,6 +456,18 @@ function PayloadSection({ label, value, openKey, isOpenState, toggleOpenState })
 				onClick={() => toggleOpenState(openKey)}
 			>
 				{label} ({frameCount})
+				<CollapseToggle collapsed={!open} hotkeyNumber={hotkeyNumber} className="ep-toggle" />
+				{isMultiFrame && (
+					<button
+						type="button"
+						className="group-hd-collapse-btn ep-section-collapse-btn"
+						onClick={handleCollapseAllFrames}
+						disabled={!(open && framesOpenCount >= 2)}
+						title="Collapse all"
+					>
+						Collapse all
+					</button>
+				)}
 			</div>
 			<div className={"collapsible" + (open ? " collapsible--open" : "")}>
 				<div className="collapsible-inner payload-section-body">
@@ -473,6 +545,7 @@ function EndpointCard({
 	// expanded (avoids drawing a second border on top of the open page card's
 	// own border when this card is nested inside a PageCard's Endpoints list).
 	const ref = useMaskSpotlight(expanded, { border: !expanded });
+	const hotkeyNumber = useCollapseHotkey(expanded, () => toggleOpenState(openKey));
 
 	// "Collapse attributes" wipes every open registry key that is a child of
 	// this card (payload sections, used-by, nested page cards) without closing
@@ -502,6 +575,7 @@ function EndpointCard({
 			<div className="ep-card-header" onClick={expanded ? () => toggleOpenState(openKey) : undefined}>
 				<Badge method={ep.method} />
 				<span className="ep-route">{ep.route}</span>
+				<CollapseToggle collapsed={!expanded} hotkeyNumber={hotkeyNumber} className="ep-toggle" />
 				<button
 					type="button"
 					className="group-hd-collapse-btn ep-card-collapse-btn"
@@ -514,35 +588,16 @@ function EndpointCard({
 			</div>
 			<div className={"collapsible" + (expanded ? " collapsible--open" : "")}>
 				<div className="collapsible-inner ep-body">
-					<div className="ep-meta-grid">
-						<span className="meta-label">Service</span>
-						<span className="meta-value meta-value--service">{ep.service}</span>
-						<span className="meta-label">Owner</span>
-						<span
-							className={"meta-value role--" + ep.owner.toLowerCase().replace(/\s+/g, "-")}
-						>
+					<div className="ep-card-meta-line">
+						<span className="ep-card-meta-service">{ep.service}</span>
+						<span className="ep-card-meta-dot">·</span>
+						<span className={"ep-card-meta-owner role--" + ep.owner.toLowerCase().replace(/\s+/g, "-")}>
 							{ep.owner}
 						</span>
-						{ep.tables.length > 0 && (
-							<>
-								<span className="meta-label">Tables</span>
-								<span className="meta-value meta-value--tables">
-									{ep.tables.join(", ")}: {ep.tables_actions}
-								</span>
-							</>
-						)}
-						{ep.constraints.rateLimit &&
-							ep.constraints.rateLimit !== "N/A" &&
-							ep.constraints.rateLimit !== "Not rate limited" && (
-							<>
-								<span className="meta-label">Rate limit</span>
-								<span className="meta-value meta-value--tables">
-									{ep.constraints.rateLimit}
-								</span>
-							</>
-						)}
-						<AuthStrategyRow ep={ep} />
-						<RequiredRoleRow ep={ep} />
+					</div>
+					<div className="ep-meta-grid">
+						<TablesRow ep={ep} openKey={openKey} isOpenState={isOpenState} toggleOpenState={toggleOpenState} collapseMatching={collapseMatching} />
+						<AccessRow ep={ep} openKey={openKey} isOpenState={isOpenState} toggleOpenState={toggleOpenState} />
 					</div>
 					{ep.method === "WS"
 						? ep.request && (
@@ -552,6 +607,8 @@ function EndpointCard({
 								openKey={openKey + ":payload:Request"}
 								isOpenState={isOpenState}
 								toggleOpenState={toggleOpenState}
+								openKeys={openKeys}
+								collapseMatching={collapseMatching}
 							/>
 						)
 						: ep.request && (
@@ -566,6 +623,8 @@ function EndpointCard({
 											openKey={openKey + ":payload:Body"}
 											isOpenState={isOpenState}
 											toggleOpenState={toggleOpenState}
+											openKeys={openKeys}
+											collapseMatching={collapseMatching}
 										/>
 									)}
 								{ep.request.cookies && (
@@ -585,6 +644,8 @@ function EndpointCard({
 							openKey={openKey + ":payload:Response"}
 							isOpenState={isOpenState}
 							toggleOpenState={toggleOpenState}
+							openKeys={openKeys}
+							collapseMatching={collapseMatching}
 						/>
 					)}
 					<ConstraintSection
@@ -636,6 +697,7 @@ function PageCard({
 	// view — and that list item shouldn't draw its own top/bottom border
 	// on top of the used-by section's.
 	const ref = useMaskSpotlight(isOpen, { border: !excludeEpId });
+	const hotkeyNumber = useCollapseHotkey(isOpen, onToggle);
 
 	const epsPrefix = keyPrefix + ":ep:";
 	const belongsToEps = (key) => key.startsWith(epsPrefix);
@@ -655,6 +717,7 @@ function PageCard({
 				<div className="page-card-header-flex">
 					<span className="page-name">{page.name}</span>
 					<span className="page-path">{page.path}</span>
+					<CollapseToggle collapsed={!isOpen} hotkeyNumber={hotkeyNumber} className="ep-toggle" />
 				</div>
 				<span className="text-mono-small">{eps.length} ep</span>
 			</div>
@@ -712,4 +775,4 @@ function PageCard({
 	);
 }
 
-export { EndpointCard, PageCard, ConstraintSection, AuthStrategyRow };
+export { EndpointCard, PageCard, ConstraintSection };

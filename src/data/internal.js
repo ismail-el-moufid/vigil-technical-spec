@@ -30,7 +30,7 @@ export const INTERNAL_ENDPOINTS =
 			security: [],
 			rateLimit: "N/A",
 			realtime: "Triggers SSE broadcast on new alert",
-			fallback: "Evaluation errors silent, batch still written to ClickHouse",
+			fallback: "Evaluation errors silent",
 			dedup:
 				"Hash (condition + service + time bucket), drop if duplicate in last 10 minutes",
 		},
@@ -67,7 +67,7 @@ export const INTERNAL_ENDPOINTS =
 			security: [],
 			rateLimit: "N/A",
 			realtime: "Triggers SSE broadcast on new alert",
-			fallback: "Evaluation errors silent, batch still written to ClickHouse",
+			fallback: "Evaluation errors silent",
 			dedup:
 				"Hash (condition + service + time bucket), drop if duplicate in last 10 minutes",
 		},
@@ -104,7 +104,7 @@ export const INTERNAL_ENDPOINTS =
 			security: [],
 			rateLimit: "N/A",
 			realtime: "Triggers SSE broadcast on new alert",
-			fallback: "Evaluation errors silent, batch still written to ClickHouse",
+			fallback: "Evaluation errors silent",
 			dedup:
 				"Hash (condition + service + time bucket), drop if duplicate in last 10 minutes",
 		},

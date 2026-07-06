@@ -233,6 +233,43 @@ body {
 	flex-shrink: 0;
 }
 
+/* ── COLLAPSE TOGGLE ── */
+/* Unified open/closed arrow shown at the end of every collapsible header,
+   with an optional keycap badge for its numbered hotkey (see
+   useCollapseHotkeys.jsx) sitting inside the same control. The modifier
+   class (.group-hd-toggle / .meta-group-toggle / .ep-toggle) is applied to
+   .collapse-toggle-inner — the arrow and keycap both just inherit color
+   from it, so they always read as one unit per header type. */
+.collapse-toggle {
+	display: inline-flex;
+	flex-shrink: 0;
+}
+
+.collapse-toggle-inner {
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
+}
+
+.collapse-toggle-key {
+	font-family: var(--font-mono);
+	font-size: 11px;
+	font-weight: 700;
+	line-height: 1;
+	color: inherit;
+	padding: 0px 4px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+}
+
+.collapse-toggle-arrow {
+	display: inline-block;
+	text-align: center;
+	color: inherit;
+}
+
 /* ── MAIN ── */
 .main {
 	flex: 1;
@@ -455,10 +492,11 @@ body {
 .group-hd-toggle {
 	font-size: 12px;
 	color: var(--text2);
-	width: 14px;
-	text-align: center;
-	flex-shrink: 0;
 	cursor: pointer;
+}
+
+.group-hd-toggle .collapse-toggle-arrow {
+	width: 14px;
 }
 
 .group-hd-collapse-btn {
@@ -528,6 +566,67 @@ body {
 	background-color: color-mix(in srgb, var(--text) 8%, transparent);
 }
 
+/* ── FLOATING COLLAPSE BUTTONS ── */
+/* Shared fixed container — portalled into by each GroupSection whose      */
+/* header has scrolled above the viewport. Buttons stack top-to-bottom;    */
+/* no collision logic needed since each group contributes exactly one.     */
+#collapse-floats {
+	position: fixed;
+	top: 16px;
+	right: 16px;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	gap: 6px;
+	z-index: 200;
+	pointer-events: none;
+}
+
+.collapse-float-btn {
+	pointer-events: all;
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	padding: 5px 10px 5px 8px;
+	background: var(--surface2);
+	border: 0.1px solid var(--border2);
+	border-radius: 6px;
+	font-family: var(--font-mono);
+	font-size: 10px;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--text2);
+	cursor: pointer;
+	box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+	animation: collapse-float-in 0.18s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.collapse-float-btn:hover {
+	color: var(--text);
+	background-color: color-mix(in srgb, var(--text) 8%, var(--surface2));
+}
+
+.collapse-float-label {
+	color: var(--text);
+	opacity: 0.5;
+	font-size: 9px;
+	letter-spacing: 0.1em;
+	padding-right: 3px;
+	border-right: 0.1px solid var(--border2);
+}
+
+@keyframes collapse-float-in {
+	from {
+		opacity: 0;
+		transform: translateX(10px);
+	}
+	to {
+		opacity: 1;
+		transform: translateX(0);
+	}
+}
+
 /* ep-card-header uses gap:12px (vs the 6px gap in .group-hd / .ep-section-head),
    so the disabled state needs a larger negative margin to cancel it fully.
    The base padding is also tightened to suit the denser card-header row —
@@ -547,9 +646,10 @@ body {
 .meta-group-toggle {
 	font-size: 12px;
 	color: var(--text2);
+}
+
+.meta-group-toggle .collapse-toggle-arrow {
 	width: 14px;
-	text-align: center;
-	flex-shrink: 0;
 }
 
 .meta-group {
@@ -612,7 +712,6 @@ body {
 	display: flex;
 	align-items: center;
 	gap: 12px;
-	padding: 0 16px;
 	margin-bottom: 8px;
 	user-select: none;
 	cursor: pointer;
@@ -638,13 +737,10 @@ body {
 .ep-toggle {
 	font-size: 12px;
 	color: var(--accent);
-	width: 18px;
-	text-align: center;
-	flex-shrink: 0;
 }
 
-.ep-toggle--open {
-	color: var(--color-delete);
+.ep-toggle .collapse-toggle-arrow {
+	width: 18px;
 }
 
 .ep-body {
@@ -668,9 +764,69 @@ body {
 
 .ep-meta-grid {
 	display: grid;
-	grid-template-columns: 90px 1fr;
-	gap: 6px 0;
+	grid-template-columns: 72px 1fr;
+	gap: 8px 0;
 	margin-left: 10px;
+}
+
+/* ── COMPACT SERVICE · OWNER LINE ─────────────────────────────────────────── */
+/* Sits above ep-meta-grid; replaces the two-row Service/Owner grid entries.   */
+.ep-card-meta-line {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-left: 10px;
+	margin-bottom: 6px;
+	opacity: 0.5;
+}
+
+.ep-card-meta-service {
+	font-size: 10px;
+	letter-spacing: 0.04em;
+	color: var(--text2);
+}
+
+.ep-card-meta-dot {
+	font-size: 10px;
+	color: var(--text2);
+	opacity: 0.4;
+}
+
+.ep-card-meta-owner {
+	font-size: 10px;
+	letter-spacing: 0.04em;
+}
+
+/* ── SCHEMA PANEL ────────────────────────────────────────────────────────── */
+/* Full-width panel that drops below the table pills row.                    */
+/* Left accent border echoes the spotlight treatment used on payload/usedby. */
+.schema-panel {
+	padding: 8px 10px 6px 12px;
+	border-left: 1.5px solid rgba(255, 255, 255, 0.07);
+	margin-left: 2px;
+	margin-bottom: 4px;
+}
+
+.schema-panel--animate {
+	animation: schema-panel-in 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes schema-panel-in {
+	from {
+		opacity: 0;
+		transform: translateY(-5px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+.schema-panel-label {
+	font-size: 10px;
+	color: var(--text2);
+	margin-bottom: 8px;
+	letter-spacing: 0.02em;
 }
 
 .meta-label {
@@ -733,7 +889,6 @@ body {
 	display: flex;
 	gap: 8px;
 	padding: 5px 0;
-	border-bottom: 0.1px solid var(--border);
 	font-size: 13px;
 	line-height: 1.55;
 }
@@ -832,6 +987,27 @@ body {
 	color: var(--text2);
 	margin-bottom: 28px;
 	text-transform: uppercase;
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 12px;
+}
+
+.panel-sub-shortcuts {
+	font-family: var(--font-mono);
+	letter-spacing: 0.02em;
+	color: var(--text2);
+	opacity: 0.75;
+}
+
+.panel-sub-shortcuts kbd {
+	background: var(--surface2);
+	border: 0.1px solid var(--border2);
+	border-radius: 3px;
+	padding: 1px 4px;
+	font-family: var(--font-mono);
+	font-size: 10px;
+	text-transform: none;
 }
 
 /* ── HIGHLIGHT ── */
@@ -849,42 +1025,6 @@ body {
 
 .highlight-ring {
 	animation: highlight-flash 1.2s ease-out forwards;
-}
-
-/* ── STAT CHIPS ── */
-.stat-row {
-	display: flex;
-	gap: 10px;
-	flex-wrap: wrap;
-	margin-bottom: 24px;
-}
-
-.stat-chip {
-	border: 0.1px solid var(--border);
-	border-radius: 8px;
-	padding: 10px 14px;
-	display: flex;
-	flex-direction: column;
-	gap: 3px;
-	min-width: 90px;
-}
-
-.stat-chip-num {
-	font-size: 24px;
-	font-weight: 800;
-	color: var(--text);
-	line-height: 1;
-}
-
-.stat-chip-label {
-	font-size: 11px;
-	letter-spacing: 0.1em;
-	color: var(--text2);
-	text-transform: uppercase;
-}
-
-.stat-chip-label--sm {
-	font-size: 10px;
 }
 
 /* ── METHOD COLORS ── */
@@ -914,6 +1054,7 @@ body {
 	--color-constraint-fallback: #ffe066;
 	--color-constraint-dedup: #3dc9ff;
 	--color-constraint-crit: #00ffb3;
+	--color-constraint-permit: #a0a0b8;
 }
 
 /* ── COLOR UTILITY (stat chips, method nums) ── */
@@ -1139,6 +1280,16 @@ body {
 	);
 	border: 0.1px solid
 		color-mix(in srgb, var(--color-constraint-crit) 35%, transparent);
+}
+.constraint-tag--permit {
+	color: var(--color-constraint-permit);
+	background: color-mix(
+		in srgb,
+		var(--color-constraint-permit) 10%,
+		transparent
+	);
+	border: 0.1px solid
+		color-mix(in srgb, var(--color-constraint-permit) 30%, transparent);
 }
 
 /* ── External / Internal COLORS ── */
@@ -1450,8 +1601,9 @@ body {
 	align-items: center;
 	flex-wrap: wrap;
 	gap: 6px;
-	padding: 6px 0 2px;
+	padding: 10px 10px 2px;
 	border-top: 0.1px solid var(--border2);
+	margin: 0 !important;
 	margin-top: 6px;
 }
 
@@ -1479,8 +1631,20 @@ body {
 }
 
 .cookie-pill::before {
-	content: "🍪";
-	font-size: 10px;
+	content: "";
+	display: inline-block;
+	width: 15px;
+	height: 15px;
+	background-color: currentColor;
+	-webkit-mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 416.991 416.991'><g><path d='M159.706,99.111c-23.159,0-42,18.841-42,42s18.841,42,42,42c23.159,0,42-18.841,42-42S182.866,99.111,159.706,99.111z M159.706,163.111c-12.131,0-22-9.869-22-22c0-12.131,9.869-22,22-22c12.131,0,22,9.869,22,22C181.706,153.242,171.837,163.111,159.706,163.111z'/><path d='M131.948,250.295c-23.159,0-42,18.841-42,42c0,23.159,18.841,42,42,42c23.159,0,42-18.841,42-42C173.948,269.136,155.107,250.295,131.948,250.295z M131.948,314.295c-12.131,0-22-9.869-22-22c0-12.131,9.869-22,22-22c12.131,0,22,9.869,22,22C153.948,304.426,144.079,314.295,131.948,314.295z'/><path d='M416.97,206.596l-0.013-0.831c-0.064-5.279-4.222-9.598-9.494-9.864c-14.875-0.751-28.007-9.639-34.27-23.193c-1.245-2.694-3.623-4.696-6.489-5.465c-2.867-0.769-5.927-0.224-8.353,1.487c-6.706,4.73-14.927,7.335-23.146,7.336c-6.964,0-13.857-1.854-19.935-5.363c-13.458-7.77-21.242-22.803-19.83-38.299c0.269-2.956-0.789-5.879-2.888-7.977c-2.1-2.1-5.033-3.154-7.977-2.889c-1.195,0.109-2.411,0.164-3.614,0.164c-14.272,0-27.562-7.662-34.683-19.996c-7.77-13.458-6.994-30.369,1.976-43.084c1.711-2.425,2.257-5.485,1.488-8.352c-0.768-2.867-2.77-5.245-5.464-6.49c-13.548-6.262-22.434-19.387-23.189-34.254c-0.268-5.269-4.583-9.424-9.858-9.492l-0.816-0.013C209.777,0.01,209.137,0,208.496,0C93.531,0,0.001,93.531,0.001,208.496s93.53,208.496,208.495,208.496s208.495-93.531,208.495-208.496C416.991,207.861,416.981,207.229,416.97,206.596z M69.977,106.111c0,12.131-9.869,22-22,22c-3.145,0-6.202-0.689-9.011-1.954c6.407-13.138,14.294-25.425,23.448-36.643C67.139,93.617,69.977,99.608,69.977,106.111z M208.496,396.991C104.559,396.991,20,312.433,20,208.496c0-22.42,3.938-43.937,11.153-63.9c5.254,2.299,10.966,3.516,16.823,3.516c23.159,0,42-18.841,42-42c0-12.271-5.276-23.603-14.108-31.424c32.732-32.446,77.26-53.009,126.502-54.589c3.157,14.763,11.764,27.746,24.107,36.418c-8.064,17.495-7.341,38.179,2.48,55.19c9.771,16.925,27.278,27.985,46.567,29.748c1.761,19.188,12.729,36.747,29.744,46.57c9.114,5.262,19.466,8.043,29.936,8.042c8.82-0.001,17.392-1.897,25.258-5.544c8.676,12.343,21.661,20.947,36.427,24.102c-0.456,14.217-2.494,28.042-5.944,41.303c-4.445-1.561-9.151-2.38-13.905-2.38c-23.159,0-42,18.841-42,42c0,13.791,6.848,26.454,17.66,34.193C318.099,370.832,266.298,396.991,208.496,396.991z M364.768,313.781c-5.935-4.016-9.724-10.811-9.724-18.234c0-12.131,9.869-22,22-22c2.725,0,5.356,0.501,7.825,1.444C379.662,288.757,372.892,301.761,364.768,313.781z'/><path d='M246.475,206.259c-29.775,0-54,24.224-54,54s24.225,54,54,54s54-24.224,54-54S276.25,206.259,246.475,206.259z M246.475,294.259c-18.748,0-34-15.253-34-34c0-18.748,15.252-34,34-34c18.748,0,34,15.252,34,34C280.475,279.006,265.223,294.259,246.475,294.259z'/></g></svg>");
+	mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 416.991 416.991'><g><path d='M159.706,99.111c-23.159,0-42,18.841-42,42s18.841,42,42,42c23.159,0,42-18.841,42-42S182.866,99.111,159.706,99.111z M159.706,163.111c-12.131,0-22-9.869-22-22c0-12.131,9.869-22,22-22c12.131,0,22,9.869,22,22C181.706,153.242,171.837,163.111,159.706,163.111z'/><path d='M131.948,250.295c-23.159,0-42,18.841-42,42c0,23.159,18.841,42,42,42c23.159,0,42-18.841,42-42C173.948,269.136,155.107,250.295,131.948,250.295z M131.948,314.295c-12.131,0-22-9.869-22-22c0-12.131,9.869-22,22-22c12.131,0,22,9.869,22,22C153.948,304.426,144.079,314.295,131.948,314.295z'/><path d='M416.97,206.596l-0.013-0.831c-0.064-5.279-4.222-9.598-9.494-9.864c-14.875-0.751-28.007-9.639-34.27-23.193c-1.245-2.694-3.623-4.696-6.489-5.465c-2.867-0.769-5.927-0.224-8.353,1.487c-6.706,4.73-14.927,7.335-23.146,7.336c-6.964,0-13.857-1.854-19.935-5.363c-13.458-7.77-21.242-22.803-19.83-38.299c0.269-2.956-0.789-5.879-2.888-7.977c-2.1-2.1-5.033-3.154-7.977-2.889c-1.195,0.109-2.411,0.164-3.614,0.164c-14.272,0-27.562-7.662-34.683-19.996c-7.77-13.458-6.994-30.369,1.976-43.084c1.711-2.425,2.257-5.485,1.488-8.352c-0.768-2.867-2.77-5.245-5.464-6.49c-13.548-6.262-22.434-19.387-23.189-34.254c-0.268-5.269-4.583-9.424-9.858-9.492l-0.816-0.013C209.777,0.01,209.137,0,208.496,0C93.531,0,0.001,93.531,0.001,208.496s93.53,208.496,208.495,208.496s208.495-93.531,208.495-208.496C416.991,207.861,416.981,207.229,416.97,206.596z M69.977,106.111c0,12.131-9.869,22-22,22c-3.145,0-6.202-0.689-9.011-1.954c6.407-13.138,14.294-25.425,23.448-36.643C67.139,93.617,69.977,99.608,69.977,106.111z M208.496,396.991C104.559,396.991,20,312.433,20,208.496c0-22.42,3.938-43.937,11.153-63.9c5.254,2.299,10.966,3.516,16.823,3.516c23.159,0,42-18.841,42-42c0-12.271-5.276-23.603-14.108-31.424c32.732-32.446,77.26-53.009,126.502-54.589c3.157,14.763,11.764,27.746,24.107,36.418c-8.064,17.495-7.341,38.179,2.48,55.19c9.771,16.925,27.278,27.985,46.567,29.748c1.761,19.188,12.729,36.747,29.744,46.57c9.114,5.262,19.466,8.043,29.936,8.042c8.82-0.001,17.392-1.897,25.258-5.544c8.676,12.343,21.661,20.947,36.427,24.102c-0.456,14.217-2.494,28.042-5.944,41.303c-4.445-1.561-9.151-2.38-13.905-2.38c-23.159,0-42,18.841-42,42c0,13.791,6.848,26.454,17.66,34.193C318.099,370.832,266.298,396.991,208.496,396.991z M364.768,313.781c-5.935-4.016-9.724-10.811-9.724-18.234c0-12.131,9.869-22,22-22c2.725,0,5.356,0.501,7.825,1.444C379.662,288.757,372.892,301.761,364.768,313.781z'/><path d='M246.475,206.259c-29.775,0-54,24.224-54,54s24.225,54,54,54s54-24.224,54-54S276.25,206.259,246.475,206.259z M246.475,294.259c-18.748,0-34-15.253-34-34c0-18.748,15.252-34,34-34c18.748,0,34,15.252,34,34C280.475,279.006,265.223,294.259,246.475,294.259z'/></g></svg>");
+	-webkit-mask-size: contain;
+	mask-size: contain;
+	-webkit-mask-repeat: no-repeat;
+	mask-repeat: no-repeat;
+	-webkit-mask-position: center;
+	mask-position: center;
+	vertical-align: middle;
 }
 
 .cookie-pill--clears {
@@ -1493,4 +1657,141 @@ body {
 		var(--color-delete) 60%,
 		transparent
 	);
+}
+
+.cookie-entry {
+	display: inline-flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 3px;
+}
+
+.cookie-attrs {
+	font-family: var(--font-mono);
+	font-size: 10px;
+	color: var(--text2);
+	padding-left: 4px;
+}
+/* ─── SCHEMA / TABLES ROW ──────────────────────────────────────────────────── */
+/* Mirrors the auth-strat-pill expand pattern. Each table name is a clickable  */
+/* pill; clicking expands its column list inline below, same as auth strategy. */
+
+.schema-tables-value {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	align-items: flex-start;
+}
+
+/* Wrapper so the inline detail block sits under its pill, not beside it */
+.schema-table-entry {
+	display: flex;
+	flex-direction: column;
+}
+
+/* The action badge (Read / Insert / etc.) inside the pill */
+.schema-table-action {
+	font-size: 8px;
+	opacity: 0.6;
+	font-weight: 400;
+	letter-spacing: 0.02em;
+	text-transform: uppercase;
+	border-left: 1px solid currentColor;
+	padding-left: 5px;
+	margin-left: 1px;
+}
+
+/* Inline schema detail block — reuses auth-strat-inline layout */
+.schema-inline {
+	margin-top: 4px;
+	margin-left: 2px;
+}
+
+.schema-table-note {
+	opacity: 0.7;
+}
+
+/* One column row: name · type · flags · notes */
+.schema-col-row {
+	display: flex;
+	align-items: baseline;
+	flex-wrap: wrap;
+	gap: 6px;
+	padding: 3px 0;
+	border-bottom: 0.5px solid rgba(255, 255, 255, 0.04);
+}
+
+.schema-col-row:last-child {
+	border-bottom: none;
+}
+
+.schema-col-name {
+	font-family: var(--font-mono);
+	font-size: 11px;
+	color: var(--text);
+	min-width: 130px;
+}
+
+.schema-col-type {
+	font-family: var(--font-mono);
+	font-size: 10px;
+	color: var(--color-put);
+	min-width: 100px;
+}
+
+.schema-col-flags {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	min-width: 180px;
+}
+
+.schema-flag {
+	font-size: 9px;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	padding: 1px 5px;
+	border-radius: 3px;
+}
+
+.schema-flag--pk {
+	color: var(--color-get);
+	background: color-mix(in srgb, var(--color-get) 12%, transparent);
+}
+
+.schema-flag--unique {
+	color: var(--color-post);
+	background: color-mix(in srgb, var(--color-post) 12%, transparent);
+}
+
+.schema-flag--fk {
+	color: var(--color-put);
+	background: color-mix(in srgb, var(--color-put) 10%, transparent);
+	font-weight: 400;
+	font-size: 9px;
+}
+
+.schema-flag--null,
+.schema-flag--notnull {
+	font-weight: 400;
+	min-width: 58px;
+	text-align: center;
+	padding: 1px 5px;
+	margin: 0;
+}
+
+.schema-flag--null {
+	color: var(--text2);
+	background: rgba(255, 255, 255, 0.05);
+}
+
+.schema-flag--notnull {
+	color: var(--text2);
+	background: transparent;
+}
+
+.schema-col-notes {
+	font-size: 10px;
+	color: var(--text2);
+	font-style: italic;
 }

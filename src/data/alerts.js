@@ -26,7 +26,7 @@ export const ALERT_ENDPOINTS =
 			criteria:
 			[
 				"Web Major Real-time features",
-				"Replaces /api/alerts/live SSE — single connection handles both push and acknowledgment",
+				"single connection handles both push and acknowledgment",
 				"Auth message required within 5 seconds of connect (same pattern as /api/llm/analyze); on timeout, server sends 'error' frame then force-closes the connection",
 				"ack frame calls the same service method as PUT /api/alerts/{id} then broadcasts 'status' frame to ALL connected sessions",
 				"PUT /api/alerts/{id} REST endpoint retained for API-key clients; it also broadcasts via the in-memory WebSocketSession registry",
@@ -45,7 +45,7 @@ export const ALERT_ENDPOINTS =
 			dedup: "None",
 		},
 		authStrategy: ["WS_AUTH_FRAME"],
-		requiredRole: "ANY_AUTH",
+		requiredRole: "ADMIN_/_VIEWER",
 		id: "ep-alerts-ws",
 	},
 	{
@@ -89,7 +89,7 @@ export const ALERT_ENDPOINTS =
 			dedup: "None",
 		},
 		authStrategy: ["JWT", "API_KEY"],
-		requiredRole: "ANY_AUTH",
+		requiredRole: "ADMIN_/_VIEWER",
 		id: "ep-alerts-list",
 	},
 	{
@@ -108,7 +108,7 @@ export const ALERT_ENDPOINTS =
 		},
 		response:
 		{
-			200: "{ data: [{ id: '<uuid>', service: '<string>', threshold: '<number>', severity: '<string>', enabled: boolean, is_preset: boolean, is_default: boolean }], hasMore: boolean }",
+			200: "{ data: [{ id: '<uuid>', service: '<string>', threshold: '<number>', severity: '<string>', enabled: boolean, is_default: boolean }], hasMore: boolean }",
 			401: "{ error: 'unauthorized' }",
 			429: "{ error: 'rate limited' }",
 			500: "{ error: 'server error' }",
@@ -127,7 +127,7 @@ export const ALERT_ENDPOINTS =
 			dedup: "None",
 		},
 		authStrategy: ["JWT", "API_KEY"],
-		requiredRole: "ANY_AUTH",
+		requiredRole: "ADMIN_/_VIEWER",
 		id: "ep-alert-rules-list",
 	},
 	{
@@ -148,7 +148,7 @@ export const ALERT_ENDPOINTS =
 			},
 		response:
 		{
-			201: "{ id: '<uuid>', service: '<string>', threshold: '<number>', severity: '<string>', enabled: boolean, is_preset: boolean, is_default: boolean }",
+			201: "{ id: '<uuid>', service: '<string>', threshold: '<number>', severity: '<string>', enabled: boolean, is_default: boolean }",
 			400: "{ error: '<validation message>' }",
 			401: "{ error: 'unauthorized' }",
 			403: "{ error: 'admin role required' }",
@@ -161,7 +161,7 @@ export const ALERT_ENDPOINTS =
 		constraints: {
 			criteria:
 			[
-				"is_preset and is_default are never client-settable; always false on rules created via this endpoint",
+				"is_default is never client-settable; always false on rules created via this endpoint",
 				"Frontend may pre-fill this form from an existing rule's values (clone) — purely a frontend UX detail, no API shape change",
 				"403 is returned when an authenticated caller lacks the ADMIN role — see Required Role",
 			],
@@ -193,7 +193,7 @@ export const ALERT_ENDPOINTS =
 		},
 		response:
 		{
-			200: "{ id: '<uuid>', service: '<string>', threshold: '<number>', severity: '<string>', enabled: boolean, is_preset: boolean, is_default: boolean }",
+			200: "{ id: '<uuid>', service: '<string>', threshold: '<number>', severity: '<string>', enabled: boolean, is_default: boolean }",
 			400: "{ error: '<validation message>' }",
 			401: "{ error: 'unauthorized' }",
 			403: "{ error: 'admin role required' } | { error: 'cannot modify service, threshold, or severity on a default rule' }",
@@ -242,7 +242,6 @@ export const ALERT_ENDPOINTS =
 		constraints: {
 			criteria: [
 			   "If is_default: true on the target row, request is rejected with 403 — default rules cannot be deleted, only disabled via PUT { enabled: false }",
-			   "is_preset: true rules can be deleted freely",
 			   "403 has two distinct causes that share one status code: caller lacks ADMIN role (role check, see Required Role) vs caller is ADMIN but targets a default rule (business rule) — disambiguate by the error message, not the status code",
 			],
 			security: [
@@ -294,7 +293,7 @@ export const ALERT_ENDPOINTS =
 			dedup: "None",
 		},
 		authStrategy: ["JWT", "API_KEY"],
-		requiredRole: "ANY_AUTH",
+		requiredRole: "ADMIN_/_VIEWER",
 		id: "ep-alert-ack",
 	},
 ];

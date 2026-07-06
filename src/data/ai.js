@@ -40,7 +40,7 @@ export const AI_ENDPOINTS =
 			dedup: "None",
 		},
 		authStrategy: ["JWT", "API_KEY"],
-		requiredRole: "ANY_AUTH",
+		requiredRole: "ADMIN_/_VIEWER",
 		id: "ep-llm-analyze",
 	},
 ];

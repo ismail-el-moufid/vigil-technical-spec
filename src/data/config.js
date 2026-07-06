@@ -21,10 +21,9 @@ export const CONFIG_ENDPOINTS =
 			criteria:
 			[
 				"Keys sourced from Spring Boot @ConfigurationProperties bean (vigil.api-key, vigil.ingestion-key)",
-				"Auto-generated as UUID via @PostConstruct at startup if properties are absent",
-				"Not stored in DB; live in memory for the lifetime of the process",
-				"api_key: accepted as an alternative to JWT on all JWT-protected endpoints via Authorization: ApiKey <key>",
-				"ingestion_key: separate from the general API key, once generated via @PostConstruct, written to a volume shared with the OTel Collector for secure provisioning",
+				"Auto-generated as UUID via @PostConstruct at startup if properties are absent, held in memory only",
+				"api_key: accepted as an alternative Auth method to JWT",
+				"ingestion_key: written to a volume shared with the OTel Collector for secure provisioning, the Otel Collector madates it's validity for services that send the Collector telemetry",
 				"Keys are read-only",
 			],
 			security: [],
