@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import useBorderSpotlight from "../hooks/useBorderSpotlight.js";
-import { useCollapseHotkey } from "../hooks/useCollapseHotkeys.jsx";
+import { useCollapseHotkey } from "../hooks/useCollapseHotkey";
 import GroupHeader from "./ui/GroupHeader.jsx";
 
 // Lazily creates the shared fixed container that all floating collapse buttons

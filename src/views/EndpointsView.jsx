@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { ENDPOINTS } from "../data";
 import useOpenState from "../hooks/useOpenState.js";
-import { HotkeyScope } from "../hooks/useCollapseHotkeys.jsx";
+import { HotkeyScope } from "../hooks/HotkeyScope";
 import MetaGroupSection from "../components/MetaGroupSection.jsx";
 import SecurityLayer from "../components/SecurityLayer.jsx";
 
@@ -26,7 +26,13 @@ export default function EndpointsView({ highlightId })
 	const [openGroups, , toggleGroup, ensureGroup, collapseGroups] = useOpenState(
 		initialGroup ? [initialGroup] : []
 	);
-	const [openMetaGroups, , toggleMetaGroup, ensureMetaGroup, collapseMetaGroups] = useOpenState([
+	const [
+	   openMetaGroups,
+	   ,
+	   toggleMetaGroup,
+	   ensureMetaGroup,
+	   collapseMetaGroups
+	] = useOpenState([
 		"External Facing",
 		"Internal Facing",
 	]);
@@ -152,9 +158,9 @@ export default function EndpointsView({ highlightId })
 				const poll = () =>
 				{
 					const h = collapsible.scrollHeight;
-					if (h === lastH) 
+					if (h === lastH)
 					{
-						doScroll(); return; 
+						doScroll(); return;
 					}
 					lastH = h;
 					requestAnimationFrame(poll);

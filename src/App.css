@@ -236,7 +236,7 @@ body {
 /* ── COLLAPSE TOGGLE ── */
 /* Unified open/closed arrow shown at the end of every collapsible header,
    with an optional keycap badge for its numbered hotkey (see
-   useCollapseHotkeys.jsx) sitting inside the same control. The modifier
+   HotkeyScope.jsx / useCollapseHotkey.js) sitting inside the same control. The modifier
    class (.group-hd-toggle / .meta-group-toggle / .ep-toggle) is applied to
    .collapse-toggle-inner — the arrow and keycap both just inherit color
    from it, so they always read as one unit per header type. */
@@ -736,7 +736,6 @@ body {
 
 .ep-toggle {
 	font-size: 12px;
-	color: var(--accent);
 }
 
 .ep-toggle .collapse-toggle-arrow {
@@ -1055,6 +1054,16 @@ body {
 	--color-constraint-dedup: #3dc9ff;
 	--color-constraint-crit: #00ffb3;
 	--color-constraint-permit: #a0a0b8;
+
+	/* Auth vs Role deliberately live outside the constraint-tag palette above:
+	   those colors are keyed by tagType (sec/rate/permit/...), which auth
+	   strategies and roles both also use for unrelated reasons — a "sec" auth
+	   strategy and a "sec" role would otherwise render in the identical color
+	   despite answering different questions ("how do you prove who you are"
+	   vs "what are you allowed to do"). One fixed hue per family, independent
+	   of tagType, keeps that distinction visible at a glance. */
+	--color-access-auth: #4d8dff;
+	--color-access-role: #e0a83d;
 }
 
 /* ── COLOR UTILITY (stat chips, method nums) ── */
@@ -1110,11 +1119,11 @@ body {
 }
 
 /* ── FILTER CHIP ACTIVE VARIANTS ── */
-.filter-chip--all.active {
+/*.filter-chip--all.active {
 	background: var(--accent);
 	border-color: var(--accent);
 	color: var(--bg);
-}
+}*/
 .filter-chip--get.active {
 	background: var(--color-get);
 	border-color: var(--color-get);
@@ -1290,6 +1299,24 @@ body {
 	);
 	border: 0.1px solid
 		color-mix(in srgb, var(--color-constraint-permit) 30%, transparent);
+}
+
+/* ── AUTH vs ROLE COLOR FAMILIES ── */
+/* One fixed hue per family (not per tagType — see --color-access-auth/-role
+   above) so an auth strategy pill and a role pill never coincidentally
+   match colors. Applied alongside .auth-strat-pill (button) or
+   .constraint-tag (static span) for sizing/layout. */
+.access-color--auth {
+	color: var(--color-access-auth);
+	background: color-mix(in srgb, var(--color-access-auth) 14%, transparent);
+	border: 0.1px solid
+		color-mix(in srgb, var(--color-access-auth) 35%, transparent);
+}
+.access-color--role {
+	color: var(--color-access-role);
+	background: color-mix(in srgb, var(--color-access-role) 14%, transparent);
+	border: 0.1px solid
+		color-mix(in srgb, var(--color-access-role) 35%, transparent);
 }
 
 /* ── External / Internal COLORS ── */
@@ -1523,6 +1550,7 @@ body {
 	color: var(--text2);
 	text-transform: uppercase;
 	margin-top: 6px;
+	padding-top: 6px;
 }
 
 .shape-frame-head:first-child {
@@ -1545,7 +1573,7 @@ body {
 }
 
 .shape-pre {
-	margin: 0 10px !important;
+	margin: 10px !important;
 	font-family: var(--font-mono);
 	font-size: 12.5px;
 	line-height: 1.55;

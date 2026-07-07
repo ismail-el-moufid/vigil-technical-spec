@@ -83,7 +83,7 @@ export const AUTH_ENDPOINTS =
 		},
 		group: "Auth",
 		tables: ["users", "sessions", "refresh_tokens"],
-		tables_actions: "Read, Insert",
+		tables_actions: "Read + Insert",
 		constraints: {
 			criteria: ["Frontend + backend validation"],
 			security: [],
@@ -116,7 +116,7 @@ export const AUTH_ENDPOINTS =
 		},
 		group: "Auth",
 		tables: ["users", "sessions", "refresh_tokens"],
-		tables_actions: "Read, Update + Insert",
+		tables_actions: "Read + Update + Insert",
 		constraints: {
 			criteria: [],
 			security:

@@ -48,13 +48,13 @@ export default function App()
 			// ⌥1 / ⌥2 — switch tabs (uses e.code so Alt+digit works on Mac too)
 			if (e.altKey && !e.ctrlKey && !e.metaKey)
 			{
-				if (e.code === "Digit1") 
+				if (e.code === "Digit1")
 				{
-					e.preventDefault(); switchTab("endpoints"); 
+					e.preventDefault(); switchTab("endpoints");
 				}
-				if (e.code === "Digit2") 
+				if (e.code === "Digit2")
 				{
-					e.preventDefault(); switchTab("pages"); 
+					e.preventDefault(); switchTab("pages");
 				}
 			}
 		};

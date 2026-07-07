@@ -116,7 +116,7 @@ export const TELEMETRY_ENDPOINTS =
 		},
 		group: "Telemetry",
 		tables: ["logs"],
-		tables_actions: "Read, new records only",
+		tables_actions: "Read (new records only)",
 		constraints: {
 			criteria:
 			[

@@ -1,7 +1,7 @@
 /**
  * CollapseToggle — the small control shown at the end of every collapsible
  * header: an open/closed arrow with, while a numbered hotkey is assigned to
- * this item (see useCollapseHotkeys.jsx), a keycap-style badge for it sitting
+ * this item (see HotkeyScope.jsx / useCollapseHotkey.js), a keycap-style badge for it sitting
  * right beside the arrow inside the same control.
  *
  * hotkeyNumber is only non-null for OPEN items that got one of the first 9
@@ -14,7 +14,11 @@ const MODIFIER_LABEL = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.tes
 	? "⌘"
 	: "Ctrl+";
 
-export default function CollapseToggle({ collapsed, hotkeyNumber, className = "" })
+export default function CollapseToggle({
+	collapsed,
+	hotkeyNumber,
+	className = ""
+})
 {
 	return (
 		<span className={"collapse-toggle" + (className ? " " + className : "")}>

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { PAGES } from "../data";
 import useOpenState from "../hooks/useOpenState.js";
-import { HotkeyScope } from "../hooks/useCollapseHotkeys.jsx";
+import { HotkeyScope } from "../hooks/HotkeyScope";
 import groupBy from "../utils/groupBy.js";
 import GroupSection from "../components/GroupSection.jsx";
 import { PageCard } from "../components/EndpointComponents.jsx";
@@ -26,7 +26,13 @@ export default function PagesView({ highlightPageId, highlightEndpointId })
 	   collapseMatching
 	] = useOpenState();
 
-	const [openGroups, , toggleGroup, ensureGroup, collapseGroups] = useOpenState();
+	const [
+	   openGroups,
+	   ,
+	   toggleGroup,
+	   ensureGroup,
+	   collapseGroups
+	] = useOpenState();
 
 	// --- Global collapse shortcuts ---------------------------------------
 	// Esc       - "step" collapse: closes every currently-open item at the

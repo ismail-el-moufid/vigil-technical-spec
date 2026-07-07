@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from "react";
 import useBorderSpotlight from "../hooks/useBorderSpotlight.js";
-import { useCollapseHotkey } from "../hooks/useCollapseHotkeys.jsx";
+import { useCollapseHotkey } from "../hooks/useCollapseHotkey";
 import groupBy from "../utils/groupBy.js";
 import GroupHeader from "./ui/GroupHeader.jsx";
 import GroupSection from "./GroupSection.jsx";

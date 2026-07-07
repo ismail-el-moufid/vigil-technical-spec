@@ -1,3 +1,9 @@
+// Internal-port endpoints omit requiredRole on purpose — access here is
+// gated by network isolation (see authStrategy: INTERNAL_ONLY), not by a
+// role check, so there's no role value to report. ROLE_ENFORCEMENT_INFO in
+// gateway.js documents the ADMIN / ADMIN_/_VIEWER / NO_AUTH tiers that apply
+// to reachable endpoints only.
+
 export const INTERNAL_ENDPOINTS =
 [
 	{

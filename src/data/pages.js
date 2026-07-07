@@ -123,11 +123,11 @@ export const PAGES =
 		id: "page-ai",
 	},
 	{
-		group: "Settings",
 		name: "Settings",
 		path: "/settings",
-		role: "Frontend Lead + Backend Lead",
 		desc: "User CRUD, role management, webhook management, and read-only display of the startup-generated API key and ingestion key (sourced from Spring Boot @ConfigurationProperties — see GET /api/config/keys). Config export is client-side: fetches alert rules and webhooks via existing GETs and downloads as JSON. Import iterates existing POST endpoints with the imported payload. Session management section lists all active sessions for the current user (device, IP, last active) with per-session revoke; the calling session is flagged as current.",
+		role: "Frontend Lead + Backend Lead",
+		group: "Settings",
 		endpointIds:
 		[
 			"ep-alerts-ws",
@@ -147,20 +147,20 @@ export const PAGES =
 		id: "page-settings",
 	},
 	{
-		group: "Status",
 		name: "Status",
 		path: "/status",
-		role: "Frontend Lead + Telemetry Engineer + Platform Engineer",
 		desc: "Infrastructure health page. Calls /api/telemetry/metrics twice: once without filter for service health panels, once with ?vigil.internal=true for infrastructure gauges. Dual-call is intentional — two distinct data sets feed two distinct UI sections.",
+		role: "Frontend Lead + Telemetry Engineer + Platform Engineer",
+		group: "Status",
 		endpointIds: ["ep-alerts-ws", "ep-telemetry-metrics", "ep-auth-logout"],
 		id: "page-status",
 	},
 	{
-		group: "Static",
 		name: "Privacy Policy + ToS",
 		path: "/privacy + /terms",
-		role: "Frontend Lead",
 		desc: "Fully static pages. Linked in persistent footer.",
+		role: "Frontend Lead",
+		group: "Static",
 		endpointIds: [],
 		id: "page-static",
 	},

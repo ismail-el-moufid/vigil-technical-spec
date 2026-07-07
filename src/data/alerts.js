@@ -136,16 +136,16 @@ export const ALERT_ENDPOINTS =
 		owner: "Backend Lead",
 		method: "POST",
 		request:
-			{
-				query: [],
-				body:
-				[
-					{ name: "service",   type: "string",  required: true },
-					{ name: "threshold", type: "number",  required: true },
-					{ name: "severity",  type: "string",  required: true },
-					{ name: "enabled",   type: "boolean", required: true },
-				],
-			},
+		{
+			query: [],
+			body:
+			[
+				{ name: "service",   type: "string",  required: true },
+				{ name: "threshold", type: "number",  required: true },
+				{ name: "severity",  type: "string",  required: true },
+				{ name: "enabled",   type: "boolean", required: true },
+			],
+		},
 		response:
 		{
 			201: "{ id: '<uuid>', service: '<string>', threshold: '<number>', severity: '<string>', enabled: boolean, is_default: boolean }",
@@ -182,14 +182,16 @@ export const ALERT_ENDPOINTS =
 		service: "Spring Boot + PostgreSQL",
 		owner: "Backend Lead",
 		method: "PUT",
-		request: {
-		   query: [],
-		   body: [
-		      { name: "enabled", type: "boolean", required: false },
-		      { name: "service", type: "string", required: false },
-		      { name: "threshold", type: "number", required: false },
-		      { name: "severity", type: "string", required: false }
-		   ]
+		request:
+		{
+			query: [],
+			body:
+			[
+				{ name: "enabled",   type: "boolean", required: false },
+				{ name: "service",   type: "string",  required: false },
+				{ name: "threshold", type: "number",  required: false },
+				{ name: "severity",  type: "string",  required: false },
+			],
 		},
 		response:
 		{
@@ -261,11 +263,13 @@ export const ALERT_ENDPOINTS =
 		service: "Spring Boot + PostgreSQL",
 		owner: "Backend Lead",
 		method: "PUT",
-		request: {
+		request:
+		{
 			query: [],
-			body: [
-			   { name: "status", type: "acknowledged | resolved", required: true }
-			]
+			body:
+			[
+				{ name: "status", type: "acknowledged | resolved", required: true },
+			],
 		},
 		response:
 		{

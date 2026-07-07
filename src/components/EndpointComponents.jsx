@@ -4,7 +4,7 @@ import Badge from "./ui/Badge.jsx";
 import RolePill from "./ui/RolePill.jsx";
 import TablesRow from "./TablesRow.jsx";
 import useMaskSpotlight from "../hooks/useMaskSpotlight.js";
-import { useCollapseHotkey } from "../hooks/useCollapseHotkeys.jsx";
+import { useCollapseHotkey } from "../hooks/useCollapseHotkey";
 import CollapseToggle from "./ui/CollapseToggle.jsx";
 
 const CONSTRAINT_CONFIG =
@@ -192,9 +192,14 @@ function formatShape(str)
 	}
 }
 
-// AccessRow merges Auth Strategy + Required Role into a single "Access" grid row.
-// Auth strategy pills expand inline (single-open, panel in a shared wrapper below).
-// The role pill sits beside the strategy pills as a non-expandable tag.
+// AuthRow and RoleRow render as two separate ep-meta-grid rows — deliberately
+// not merged into one "Access" row. Authentication (how the caller proves
+// who they are) and authorization (what that identity is allowed to do) are
+// different questions enforced at different layers (AuthFilter vs.
+// controller/service — see ROLE_ENFORCEMENT_INFO.note in gateway.js), so
+// they get their own label and their own color family (access-color--auth /
+// access-color--role) rather than sharing tagType-derived colors that could
+// coincidentally collide between an auth strategy and a role.
 function AccessRow({ ep, openKey, isOpenState, toggleOpenState })
 {
 	const strats   = (ep.authStrategy || []).map((k) => AUTH_STRATEGIES[k]).filter(Boolean);
@@ -205,42 +210,51 @@ function AccessRow({ ep, openKey, isOpenState, toggleOpenState })
 
 	return (
 		<>
-			<span className="meta-label meta-label--auth">Access</span>
-			<span className="meta-value meta-value--auth">
-				{strats.map((s) => (
-					<button
-						key={s.id}
-						className={"auth-strat-pill constraint-tag--" + s.tagType + (openStratId === s.id ? " auth-strat-pill--open" : "")}
-						onClick={() => toggleOpenState(openKey + ":auth:" + s.id)}
-					>
-						{s.tag}{" "}
-						<span className="auth-strat-pill-chevron">
-							{openStratId === s.id ? "▲" : "▼"}
-						</span>
-					</button>
-				))}
-				{roleInfo && (
-					<span className={"constraint-tag constraint-tag--" + roleInfo.tagType}>
-						{roleInfo.tag}
+			{strats.length > 0 && (
+				<>
+					<span className="meta-label meta-label--auth">Auth</span>
+					<span className="meta-value meta-value--auth">
+						{strats.map((s) => (
+							<button
+								key={s.id}
+								className={"auth-strat-pill access-color--auth" + (openStratId === s.id ? " auth-strat-pill--open" : "")}
+								onClick={() => toggleOpenState(openKey + ":auth:" + s.id)}
+							>
+								{s.tag}{" "}
+								<span className="auth-strat-pill-chevron">
+									{openStratId === s.id ? "▲" : "▼"}
+								</span>
+							</button>
+						))}
 					</span>
-				)}
-			</span>
-			{/* Single wrapper — avoids multiplying grid gap by strat count */}
-			<div style={{ gridColumn: "1 / -1" }}>
-				{strats.map((s) => (
-					<div key={s.id} className={"collapsible" + (openStratId === s.id ? " collapsible--open" : "")}>
-						<div className="collapsible-inner auth-strat-inline">
-							<div className="auth-strat-inline-label">{s.label}</div>
-							{s.items.map((item, i) => (
-								<div className="gw-row-item" key={i}>
-									<span className="gw-row-dot">·</span>
-									<span className="constraint-text">{item}</span>
+					{/* Single wrapper — avoids multiplying grid gap by strat count */}
+					<div style={{ gridColumn: "1 / -1" }}>
+						{strats.map((s) => (
+							<div key={s.id} className={"collapsible" + (openStratId === s.id ? " collapsible--open" : "")}>
+								<div className="collapsible-inner auth-strat-inline">
+									<div className="auth-strat-inline-label">{s.label}</div>
+									{s.items.map((item, i) => (
+										<div className="gw-row-item" key={i}>
+											<span className="gw-row-dot">·</span>
+											<span className="constraint-text">{item}</span>
+										</div>
+									))}
 								</div>
-							))}
-						</div>
+							</div>
+						))}
 					</div>
-				))}
-			</div>
+				</>
+			)}
+			{roleInfo && (
+				<>
+					<span className="meta-label meta-label--auth">Role</span>
+					<span className="meta-value meta-value--auth">
+						<span className="constraint-tag access-color--role">
+							{roleInfo.tag}
+						</span>
+					</span>
+				</>
+			)}
 		</>
 	);
 }
@@ -427,7 +441,15 @@ function ShapeFrame({ frame, shape, frameKey, isOpenState, toggleOpenState })
 // so a group-level "collapse all" can reach it without lifting state manually.
 // When value is an object (multi-frame), each frame is individually collapsible
 // via its own registry key, collapsed by default.
-function PayloadSection({ label, value, openKey, isOpenState, toggleOpenState, openKeys, collapseMatching })
+function PayloadSection({
+	label,
+	value,
+	openKey,
+	isOpenState,
+	toggleOpenState,
+	openKeys,
+	collapseMatching
+})
 {
 	const open = isOpenState(openKey);
 	const ref = useMaskSpotlight(open, { border: false });
@@ -441,7 +463,9 @@ function PayloadSection({ label, value, openKey, isOpenState, toggleOpenState, o
 	// with 0 or 1 there's nothing meaningful to collapse "all" of.
 	const framesPrefix = openKey + ":frame:";
 	const belongsToFrames = (key) => key.startsWith(framesPrefix);
-	const framesOpenCount = isMultiFrame && openKeys ? [...openKeys].filter(belongsToFrames).length : 0;
+	const framesOpenCount = isMultiFrame && openKeys ? [
+	   ...openKeys
+	].filter(belongsToFrames).length : 0;
 
 	function handleCollapseAllFrames(e)
 	{

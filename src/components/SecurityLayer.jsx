@@ -1,5 +1,5 @@
-import { FILTER_CHAIN, AUTH_STRATEGIES } from "../data";
-import { useCollapseHotkey } from "../hooks/useCollapseHotkeys.jsx";
+import { FILTER_CHAIN } from "../data";
+import { useCollapseHotkey } from "../hooks/useCollapseHotkey";
 import CollapseToggle from "./ui/CollapseToggle.jsx";
 
 /**
