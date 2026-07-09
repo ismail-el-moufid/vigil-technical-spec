@@ -35,7 +35,7 @@ export const AUTH_STRATEGIES =
 		[
 			"Program-level lifetime",
 			"generated at startup via @PostConstruct, held in memory",
-			"vigil.api-key: accepted on all protected endpoints; same access level as a valid JWT",
+			"Not tied to a users row, so it has no role of its own — treated as ADMIN-equivalent on every endpoint that accepts it, including ADMIN-only ones. It is an operator/service credential (used by the OTel Collector, external API clients, etc.), not a per-person credential — anyone holding it has full API access regardless of the endpoint's requiredRole",
 		],
 	},
 	INTERNAL_ONLY: {
@@ -49,14 +49,15 @@ export const AUTH_STRATEGIES =
 			"Called exclusively by trusted internal services",
 		],
 	},
-	WS_AUTH_FRAME: {
-		id: "gw-strat-ws-auth-frame",
+	WS_AUTH_HANDSHAKE: {
+		id: "gw-strat-ws-auth-handshake",
 		tag: "WS AUTH",
 		tagType: "sec",
-		label: "WebSocket, JWT validated at handshake via AuthFilter",
+		label: "WebSocket, JWT validated at handshake via HandshakeInterceptor",
 		items:
 		[
-			"Connection rejected if token is invalid or missing at handshake",
+			"Token passed as ?token= on the upgrade request — same tradeoff as SSE (native WebSocket clients can't set an Authorization header either); accepted for this project",
+			"Connection rejected during the HTTP Upgrade if the token is invalid or missing — an unauthenticated client never completes the handshake, so there's no post-connect auth window or frame protocol",
 			"On token expiry, client reconnects with a fresh token; no mid-session re-auth frames",
 		],
 	},
@@ -112,9 +113,11 @@ export const RATE_LIMITING_INFO =
 		items:
 		[
 			"Capacity: 10 tokens. Refill: +10 every 60 s.",
-			"Keyed by client IP — shared bucket across all endpoints for that IP",
+			"Keyed by client IP — shared bucket across all endpoints for that IP, not one bucket per route",
 			"429 Too Many Requests + Retry-After header on exhaustion",
 			"Rate check runs before auth — an exhausted IP never reaches AuthFilter",
+			"Bucket counts requests, not rows: GET ?format=csv on the telemetry endpoints returns the full unpaginated dataset in one response but still consumes exactly one token, same as a normal small page — this is what makes CSV export viable without a separate rate-limit carve-out (see TELEMETRY_ENDPOINTS in telemetry.js for the format=csv option)",
+			"Known simplification: a single page load can consume several tokens at once (e.g. Overview: 3 REST GETs + 3 SSE upgrades = 6 of 10), and the bucket is shared per-IP, so multiple users behind the same NAT/proxy draw from the same 10. Acceptable for project scope; a production system would key per-user and/or size buckets per-route.",
 		],
 	},
 	{
@@ -123,25 +126,26 @@ export const RATE_LIMITING_INFO =
 		label: "Routes excluded from rate limiting",
 		items:
 		[
-			"/internal/otlp/** — internal port, network-isolated; no HTTP rate limiting applies",
-			"/api/alerts/ws upgrade — single long-lived connection per client; the upgrade GET counts once, frames do not",
+			"/internal/ingest/** — internal port, network-isolated; no HTTP rate limiting applies",
+			"/internal/llm/forward — same internal port, same network isolation; no HTTP rate limiting applies (previously undocumented here despite ep-fastapi-analyze in internal.js declaring rateLimit: 'N/A' — this entry closes that gap so the two files agree)",
 		],
 	},
 	{
-		tag: "SSE",
+		tag: "SSE / WS",
 		tagType: "realtime",
 		label: "Rate limiting on the initial upgrade GET only",
 		items:
 		[
 			"The HTTP GET opening the stream consumes one token at connection time",
 			"Server-push frames over the established stream are not rate-limited",
+			"/api/alerts/ws upgrade — single long-lived connection per client; the upgrade GET counts once against the DEFAULT bucket, subsequent frames do not",
 		],
 	},
 ];
 
 export const ROLE_ENFORCEMENT_INFO =
 {
-	note: 'The filter resolves identity only — it answers "who is this?". Role checks (@PreAuthorize or explicit) live in the controller or service layer, not the filter. Alerts endpoints document their own requiredRole directly on each endpoint in alerts.js, rather than being listed here — keeps that fact in exactly one place instead of two that can drift apart.',
+	note: 'The filter resolves identity only — it answers "who is this?". Role checks (@PreAuthorize or explicit) live in the controller or service layer, not the filter. Alerts endpoints document their own requiredRole directly on each endpoint in alerts.js, rather than being listed here — keeps that fact in exactly one place instead of two that can drift apart. The roles below describe JWT-authenticated callers; a valid API_KEY satisfies every tier including ADMIN, since it carries no role of its own (see AUTH_STRATEGIES.API_KEY).',
 	roles:
 	[
 		{
@@ -151,8 +155,8 @@ export const ROLE_ENFORCEMENT_INFO =
 			items:
 			[
 				"GET /api/config/keys · POST /api/users · GET /api/users",
-				"PUT /api/users/{id} · DELETE /api/users/{id} (409 if last admin)",
-				"POST + DELETE /api/webhooks",
+				"PATCH /api/users/{id} · DELETE /api/users/{id} (both 409 if the action would leave zero admins)",
+				"GET + POST + DELETE /api/webhooks",
 			],
 		},
 		{
@@ -161,7 +165,7 @@ export const ROLE_ENFORCEMENT_INFO =
 			label: "Any authenticated caller — JWT or API key, any role",
 			items:
 			[
-				"All telemetry reads · GET /api/webhooks · PUT /api/users/me",
+				"All telemetry reads · PATCH /api/users/me",
 				"POST /api/llm/analyze · all SSE streams",
 			],
 		},

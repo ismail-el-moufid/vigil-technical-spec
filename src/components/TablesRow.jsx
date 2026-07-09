@@ -28,15 +28,17 @@ function ColumnRow({ col })
 	);
 }
 
-function parseActions(tables, actionsStr)
+// tables_actions is now a per-table object ({ tableName: "action text" }),
+// not a positional comma/plus-separated string — so there's no ambiguity
+// about which action belongs to which table, and no risk of the mapping
+// silently breaking when an action needs more than one word (e.g. "Read +
+// Insert" on a single table, or a multi-clause description spanning several
+// tables). Tolerates a missing entry for a given table (renders no action
+// tag for it) rather than throwing.
+function actionsFor(tablesActions)
 {
-	if (!actionsStr || actionsStr === "None" || tables.length === 0) return {};
-	const parts = actionsStr.split(/[,+]/).map((s) => s.trim()).filter(Boolean);
-	if (parts.length === tables.length)
-		return Object.fromEntries(tables.map((t, i) => [t, parts[i]]));
-	if (parts.length === 1)
-		return Object.fromEntries(tables.map((t) => [t, parts[0]]));
-	return {};
+	if (!tablesActions || typeof tablesActions !== "object") return {};
+	return tablesActions;
 }
 
 // Single-open. Only the active panel is in the DOM; key={openName} causes
@@ -52,7 +54,7 @@ export default function TablesRow({
 {
 	if (!ep.tables || ep.tables.length === 0) return null;
 
-	const actionMap = parseActions(ep.tables, ep.tables_actions);
+	const actionMap = actionsFor(ep.tables_actions);
 	const openName  = ep.tables.find((name) => isOpenState(openKey + ":table:" + name)) ?? null;
 
 	function handleTableClick(pillKey)

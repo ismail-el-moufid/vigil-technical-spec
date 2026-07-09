@@ -33,4 +33,3 @@ export const ENDPOINTS =
 	...AI_ENDPOINTS,
 	...INTERNAL_ENDPOINTS,
 ];
-

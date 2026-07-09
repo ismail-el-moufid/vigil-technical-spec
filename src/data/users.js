@@ -16,7 +16,7 @@ export const USERS_ENDPOINTS =
 		},
 		group: "Users",
 		tables: ["users"],
-		tables_actions: "Read",
+		tables_actions: { users: "Read" },
 		constraints: {
 			criteria: ["User Management Major (2pt)"],
 			security: [],
@@ -39,9 +39,21 @@ export const USERS_ENDPOINTS =
 			query: [],
 			body:
 			[
-				{ name: "email",    type: "string",         required: true },
-				{ name: "password", type: "string",         required: true },
-				{ name: "role",     type: "admin | viewer", required: true },
+				{
+					name: "email",
+					type: "string",
+					required: true
+				},
+				{
+					name: "password",
+					type: "string",
+					required: true
+				},
+				{
+					name: "role",
+					type: "admin | viewer",
+					required: true
+				},
 			],
 		},
 		response:
@@ -50,14 +62,18 @@ export const USERS_ENDPOINTS =
 			400: "{ error: '<validation message>' }",
 			401: "{ error: 'unauthorized' }",
 			403: "{ error: 'admin role required' }",
+			409: "{ error: 'email already registered' }",
 			429: "{ error: 'rate limited' }",
 			500: "{ error: 'server error' }",
 		},
 		group: "Users",
 		tables: ["users"],
-		tables_actions: "Insert",
+		tables_actions: { users: "Insert" },
 		constraints: {
-			criteria: ["User Management Major (2pt)"],
+			criteria: [
+				"User Management Major (2pt)",
+				"409 returned if email collides with the existing unique constraint on users.email — checked before insert, not left as an unhandled DB constraint violation",
+			],
 			security: [],
 			rateLimit: "10 req/min",
 			realtime: "None",
@@ -72,13 +88,13 @@ export const USERS_ENDPOINTS =
 		route: "/api/users/me",
 		service: "Spring Boot + PostgreSQL",
 		owner: "Backend Lead",
-		method: "PUT",
+		method: "PATCH",
 		request:
 		{
 			query: [],
 			body:
 			[
-				{ name: "email",    type: "string", required: false },
+				{ name: "email", type: "string", required: false },
 				{ name: "password", type: "string", required: false },
 			],
 		},
@@ -87,14 +103,17 @@ export const USERS_ENDPOINTS =
 			200: "{ id: '<uuid>', email: '<email>', role: admin | viewer }",
 			400: "{ error: '<validation message>' }",
 			401: "{ error: 'unauthorized' }",
+			409: "{ error: 'email already registered' }",
 			429: "{ error: 'rate limited' }",
 			500: "{ error: 'server error' }",
 		},
 		group: "Users",
 		tables: ["users"],
-		tables_actions: "Update",
+		tables_actions: { users: "Update" },
 		constraints: {
-			criteria: [],
+			criteria: [
+				"409 returned if a requested email collides with another user's users.email unique constraint",
+			],
 			security: [],
 			rateLimit: "10 req/min",
 			realtime: "None",
@@ -109,15 +128,15 @@ export const USERS_ENDPOINTS =
 		route: "/api/users/{id}",
 		service: "Spring Boot + PostgreSQL",
 		owner: "Backend Lead",
-		method: "PUT",
+		method: "PATCH",
 		request:
 		{
 			query: [],
 			body:
 			[
-				{ name: "email",    type: "string",         required: false },
-				{ name: "role",     type: "admin | viewer", required: false },
-				{ name: "password", type: "string",         required: false },
+				{ name: "email", type: "string",required: false },
+				{ name: "role",  type: "admin | viewer", required: false },
+				{ name: "password", type: "string",required: false },
 			],
 		},
 		response:
@@ -127,14 +146,19 @@ export const USERS_ENDPOINTS =
 			401: "{ error: 'unauthorized' }",
 			403: "{ error: 'admin role required' }",
 			404: "{ error: 'user not found' }",
+			409: "{ error: 'cannot demote the last remaining admin', code: 'LAST_ADMIN' } | { error: 'email already registered', code: 'EMAIL_TAKEN' }",
 			429: "{ error: 'rate limited' }",
 			500: "{ error: 'server error' }",
 		},
 		group: "Users",
 		tables: ["users"],
-		tables_actions: "Update",
+		tables_actions: { users: "Update" },
 		constraints: {
-			criteria: [],
+			criteria:
+			[
+				"If role: viewer is requested and the target is currently the only user with role: admin, request is rejected with 409 — same guard as ep-users-delete, since demotion is functionally equivalent to removal",
+				"If email is requested and collides with another user's users.email unique constraint, request is rejected with 409 — both 409 causes share the status code but carry distinct 'code' values (LAST_ADMIN vs EMAIL_TAKEN); clients should branch on 'code', not the 'error' message text",
+			],
 			security: [],
 			rateLimit: "10 req/min",
 			realtime: "None",
@@ -157,14 +181,25 @@ export const USERS_ENDPOINTS =
 			401: "{ error: 'unauthorized' }",
 			403: "{ error: 'admin role required' }",
 			404: "{ error: 'user not found' }",
+			409: "{ error: 'cannot delete the last remaining admin', code: 'LAST_ADMIN' }",
 			429: "{ error: 'rate limited' }",
 			500: "{ error: 'server error' }",
 		},
 		group: "Users",
-		tables: ["users"],
-		tables_actions: "Delete",
+		tables: ["users", "sessions", "refresh_tokens", "alert_acks"],
+		tables_actions: {
+			users: "Delete",
+			sessions: "Cascade Delete",
+			refresh_tokens: "Cascade Delete",
+			alert_acks: "Cascade Delete"
+		},
 		constraints: {
-			criteria: [],
+			criteria:
+			[
+				"If the target is currently the only user with role: admin, request is rejected with 409 — prevents the deployment from ending up with zero admins",
+				"sessions.user_id and refresh_tokens.user_id are declared ON DELETE CASCADE — deleting a user removes all of their sessions and refresh_tokens rows in the same transaction as the users delete, so the 204 path never hits a dangling FK constraint",
+				"alert_acks.user_id (see SCHEMA.alert_acks) is also ON DELETE CASCADE — a deleted user's alert acknowledgment history is removed with them; this is an explicit, accepted product decision (not silent data loss) since re-showing acks for a deleted account has no meaningful owner to display",
+			],
 			security: [],
 			rateLimit: "10 req/min",
 			realtime: "None",

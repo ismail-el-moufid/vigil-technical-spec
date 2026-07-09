@@ -16,14 +16,12 @@ export const CONFIG_ENDPOINTS =
 		},
 		group: "Config Keys",
 		tables: [],
-		tables_actions: "None",
+		tables_actions: {},
 		constraints: {
 			criteria:
 			[
 				"Keys sourced from Spring Boot @ConfigurationProperties bean (vigil.api-key, vigil.ingestion-key)",
 				"Auto-generated as UUID via @PostConstruct at startup if properties are absent, held in memory only",
-				"api_key: accepted as an alternative Auth method to JWT",
-				"ingestion_key: written to a volume shared with the OTel Collector for secure provisioning, the Otel Collector madates it's validity for services that send the Collector telemetry",
 				"Keys are read-only",
 			],
 			security: [],

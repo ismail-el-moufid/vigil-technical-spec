@@ -958,8 +958,6 @@ body {
 	font-weight: 600;
 	letter-spacing: 0.08em;
 	padding: 4px 10px;
-	border-radius: 99px;
-	border: 0.1px solid;
 	text-transform: uppercase;
 	margin-right: 6px;
 	margin-bottom: 6px;
@@ -1086,36 +1084,18 @@ body {
 	color: var(--color-sse);
 }
 
-/* ── BADGE VARIANTS ── */
-.badge--get {
-	color: var(--color-get);
-	background: color-mix(in srgb, var(--color-get) 12%, transparent);
-	border: 0.1px solid color-mix(in srgb, var(--color-get) 35%, transparent);
-}
-.badge--post {
-	color: var(--color-post);
-	background: color-mix(in srgb, var(--color-post) 12%, transparent);
-	border: 0.1px solid color-mix(in srgb, var(--color-post) 35%, transparent);
-}
-.badge--put {
-	color: var(--color-put);
-	background: color-mix(in srgb, var(--color-put) 12%, transparent);
-	border: 0.1px solid color-mix(in srgb, var(--color-put) 35%, transparent);
-}
-.badge--delete {
-	color: var(--color-delete);
-	background: color-mix(in srgb, var(--color-delete) 12%, transparent);
-	border: 0.1px solid color-mix(in srgb, var(--color-delete) 35%, transparent);
-}
-.badge--ws {
-	color: var(--color-ws);
-	background: color-mix(in srgb, var(--color-ws) 12%, transparent);
-	border: 0.1px solid color-mix(in srgb, var(--color-ws) 35%, transparent);
-}
+/* ── BADGE VARIANTS ──
+   All method badges (GET/POST/PUT/DELETE/WS/SSE/PATCH) now share the plain,
+   uncolored look of the base .badge class — no per-method color/background/
+   border overrides. Kept as empty selectors (rather than deleting them) so
+   Badge.jsx's className wiring stays valid and future per-method theming has
+   an obvious place to go back in. */
+.badge--get,
+.badge--post,
+.badge--put,
+.badge--delete,
+.badge--ws,
 .badge--sse {
-	color: var(--color-sse);
-	background: color-mix(in srgb, var(--color-sse) 12%, transparent);
-	border: 0.1px solid color-mix(in srgb, var(--color-sse) 35%, transparent);
 }
 
 /* ── FILTER CHIP ACTIVE VARIANTS ── */
@@ -1172,52 +1152,6 @@ body {
 	color: var(--color-platform-engineer);
 }
 
-/* ── ROLE PILL VARIANTS ── */
-.role-pill.role--frontend-lead {
-	border-color: color-mix(
-		in srgb,
-		var(--color-frontend-lead) 40%,
-		transparent
-	);
-	background: color-mix(in srgb, var(--color-frontend-lead) 10%, transparent);
-}
-.role-pill.role--backend-lead {
-	border-color: color-mix(
-		in srgb,
-		var(--color-backend-lead) 40%,
-		transparent
-	);
-	background: color-mix(in srgb, var(--color-backend-lead) 10%, transparent);
-}
-.role-pill.role--telemetry-engineer {
-	border-color: color-mix(
-		in srgb,
-		var(--color-telemetry-engineer) 40%,
-		transparent
-	);
-	background: color-mix(
-		in srgb,
-		var(--color-telemetry-engineer) 10%,
-		transparent
-	);
-}
-.role-pill.role--ai-engineer {
-	border-color: color-mix(in srgb, var(--color-ai-engineer) 40%, transparent);
-	background: color-mix(in srgb, var(--color-ai-engineer) 10%, transparent);
-}
-.role-pill.role--platform-engineer {
-	border-color: color-mix(
-		in srgb,
-		var(--color-platform-engineer) 40%,
-		transparent
-	);
-	background: color-mix(
-		in srgb,
-		var(--color-platform-engineer) 10%,
-		transparent
-	);
-}
-
 /* ── META VALUE VARIANTS ── */
 .meta-value--service {
 	color: var(--color-get);
@@ -1229,94 +1163,43 @@ body {
 	color: var(--color-post);
 }
 
-/* ── CONSTRAINT TAG VARIANTS ── */
+/* ── CONSTRAINT TAG VARIANTS ──
+   Background/border removed per request — text color is the only remaining
+   signal distinguishing these variants. */
 .constraint-tag--sec {
 	color: var(--color-constraint-sec);
-	background: color-mix(
-		in srgb,
-		var(--color-constraint-sec) 14%,
-		transparent
-	);
-	border: 0.1px solid
-		color-mix(in srgb, var(--color-constraint-sec) 35%, transparent);
 }
 .constraint-tag--rate {
 	color: var(--color-constraint-rate);
-	background: color-mix(
-		in srgb,
-		var(--color-constraint-rate) 14%,
-		transparent
-	);
-	border: 0.1px solid
-		color-mix(in srgb, var(--color-constraint-rate) 35%, transparent);
 }
 .constraint-tag--realtime {
 	color: var(--color-constraint-realtime);
-	background: color-mix(
-		in srgb,
-		var(--color-constraint-realtime) 14%,
-		transparent
-	);
-	border: 0.1px solid
-		color-mix(in srgb, var(--color-constraint-realtime) 35%, transparent);
 }
 .constraint-tag--fallback {
 	color: var(--color-constraint-fallback);
-	background: color-mix(
-		in srgb,
-		var(--color-constraint-fallback) 14%,
-		transparent
-	);
-	border: 0.1px solid
-		color-mix(in srgb, var(--color-constraint-fallback) 35%, transparent);
 }
 .constraint-tag--dedup {
 	color: var(--color-constraint-dedup);
-	background: color-mix(
-		in srgb,
-		var(--color-constraint-dedup) 14%,
-		transparent
-	);
-	border: 0.1px solid
-		color-mix(in srgb, var(--color-constraint-dedup) 35%, transparent);
 }
 .constraint-tag--crit {
 	color: var(--color-constraint-crit);
-	background: color-mix(
-		in srgb,
-		var(--color-constraint-crit) 14%,
-		transparent
-	);
-	border: 0.1px solid
-		color-mix(in srgb, var(--color-constraint-crit) 35%, transparent);
 }
 .constraint-tag--permit {
 	color: var(--color-constraint-permit);
-	background: color-mix(
-		in srgb,
-		var(--color-constraint-permit) 10%,
-		transparent
-	);
-	border: 0.1px solid
-		color-mix(in srgb, var(--color-constraint-permit) 30%, transparent);
 }
 
 /* ── AUTH vs ROLE COLOR FAMILIES ── */
 /* One fixed hue per family (not per tagType — see --color-access-auth/-role
    above) so an auth strategy pill and a role pill never coincidentally
    match colors. Applied alongside .auth-strat-pill (button) or
-   .constraint-tag (static span) for sizing/layout. */
+   .constraint-tag (static span) for sizing/layout.
+   Background/border removed per request — color is the only remaining
+   differentiator. */
 .access-color--auth {
 	color: var(--color-access-auth);
-	background: color-mix(in srgb, var(--color-access-auth) 14%, transparent);
-	border: 0.1px solid
-		color-mix(in srgb, var(--color-access-auth) 35%, transparent);
 }
 .access-color--role {
 	color: var(--color-access-role);
-	background: color-mix(in srgb, var(--color-access-role) 14%, transparent);
-	border: 0.1px solid
-		color-mix(in srgb, var(--color-access-role) 35%, transparent);
 }
 
 /* ── External / Internal COLORS ── */
@@ -1420,12 +1303,10 @@ body {
 
 .auth-strat-pill:hover {
 	opacity: 0.85;
-	border-color: currentColor;
 }
 
 .auth-strat-pill--open {
-	border-color: currentColor;
-	background: rgba(255, 255, 255, 0.04);
+	text-decoration: underline;
 }
 
 .auth-strat-pill-chevron {
@@ -1600,15 +1481,13 @@ body {
 	gap: 5px;
 	padding: 3px 8px;
 	border-radius: 999px;
-	border: 0.1px dashed var(--border2);
-	background: var(--surface2);
 	font-family: var(--font-mono);
 	font-size: 11.5px;
 }
 
 .query-param-pill--required {
-	border-style: solid;
-	border-color: var(--color-post);
+	text-decoration: underline;
+	text-decoration-color: var(--color-post);
 }
 
 .query-param-name {
@@ -1651,8 +1530,6 @@ body {
 	gap: 4px;
 	padding: 2px 8px 2px 6px;
 	border-radius: 999px;
-	border: 0.1px solid var(--color-post);
-	background: color-mix(in srgb, var(--color-post) 8%, transparent);
 	font-family: var(--font-mono);
 	font-size: 11px;
 	color: var(--color-post);
@@ -1676,8 +1553,6 @@ body {
 }
 
 .cookie-pill--clears {
-	border-color: var(--color-delete);
-	background: color-mix(in srgb, var(--color-delete) 8%, transparent);
 	color: var(--color-delete);
 	text-decoration: line-through;
 	text-decoration-color: color-mix(

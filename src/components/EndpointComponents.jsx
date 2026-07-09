@@ -20,25 +20,15 @@ const CONSTRAINT_CONFIG =
 	},
 ];
 
-// id -> route lookup so cookie attributes can reference an endpoint instead
-// of duplicating its path as a literal string that could drift out of sync.
-const ROUTE_BY_ID = Object.fromEntries(ENDPOINTS.map((e) => [e.id, e.route]));
-
-// Turns a cookie attribute object (httpOnly/secure/sameSite/pathEndpointId/
-// maxAge) into the list of short labels shown under its pill, in Set-Cookie
-// order. pathEndpointId is resolved against ROUTE_BY_ID so the displayed
-// Path= always matches that endpoint's actual route.
+// Turns a cookie attribute object (httpOnly/secure/sameSite/path/maxAge)
+// into the list of short labels shown under its pill, in Set-Cookie order.
 function cookieAttrList(c)
 {
 	const out = [];
 	if (c.httpOnly) out.push("HttpOnly");
 	if (c.secure) out.push("Secure");
 	if (c.sameSite) out.push(`SameSite=${c.sameSite}`);
-	if (c.pathEndpointId)
-	{
-		const route = ROUTE_BY_ID[c.pathEndpointId];
-		out.push(`Path=${route ?? `<unknown endpoint id: ${c.pathEndpointId}>`}`);
-	}
+	if (c.path) out.push(`Path=${c.path}`);
 	if (c.maxAge) out.push(`Max-Age=${c.maxAge}`);
 	if (c.note) out.push(c.note);
 	return out;
@@ -589,6 +579,17 @@ function EndpointCard({
 		collapseMatching(belongsToCard);
 	}
 
+	// WS requests can mix a query-param array (handshake auth, e.g. ?token=)
+	// with string-valued frames (e.g. ack). query is peeled off and rendered
+	// via QueryParamsSection just like every non-WS method — PayloadSection's
+	// frame renderer (formatShape) only handles string shapes, so passing a
+	// query array through it would try to render the raw array as a child.
+	const wsRequestFrames = ep.method === "WS" && ep.request
+		? Object.fromEntries(Object.entries(ep.request).filter(([
+		   k
+		]) => k !== "query"))
+		: null;
+
 	return (
 		<div
 			ref={ref}
@@ -625,15 +626,20 @@ function EndpointCard({
 					</div>
 					{ep.method === "WS"
 						? ep.request && (
-							<PayloadSection
-								label="Request"
-								value={ep.request}
-								openKey={openKey + ":payload:Request"}
-								isOpenState={isOpenState}
-								toggleOpenState={toggleOpenState}
-								openKeys={openKeys}
-								collapseMatching={collapseMatching}
-							/>
+							<>
+								<QueryParamsSection params={ep.request.query} />
+								{Object.keys(wsRequestFrames).length > 0 && (
+									<PayloadSection
+										label="Request"
+										value={wsRequestFrames}
+										openKey={openKey + ":payload:Request"}
+										isOpenState={isOpenState}
+										toggleOpenState={toggleOpenState}
+										openKeys={openKeys}
+										collapseMatching={collapseMatching}
+									/>
+								)}
+							</>
 						)
 						: ep.request && (
 							<>

@@ -16,7 +16,7 @@ export const WEBHOOKS_ENDPOINTS =
 		},
 		group: "Webhooks",
 		tables: ["webhooks"],
-		tables_actions: "Read",
+		tables_actions: { webhooks: "Read" },
 		constraints: {
 			criteria: [],
 			security: [],
@@ -39,7 +39,11 @@ export const WEBHOOKS_ENDPOINTS =
 			query: [],
 			body:
 			[
-				{ name: "url", type: "string", required: true },
+				{
+					name: "url",
+					type: "string (must be a well-formed https:// URL)",
+					required: true
+				},
 			],
 		},
 		response:
@@ -48,15 +52,21 @@ export const WEBHOOKS_ENDPOINTS =
 			400: "{ error: '<validation message>' }",
 			401: "{ error: 'unauthorized' }",
 			403: "{ error: 'admin role required' }",
+			409: "{ error: 'webhook url already registered' }",
 			429: "{ error: 'rate limited' }",
 			500: "{ error: 'server error' }",
 		},
 		group: "Webhooks",
 		tables: ["webhooks"],
-		tables_actions: "Insert",
+		tables_actions: { webhooks: "Insert" },
 		constraints: {
-			criteria: [],
-			security: [],
+			criteria: [
+				"400 if url isn't a well-formed https:// URL",
+				"409 if url collides with the existing unique constraint on webhooks.url — checked before insert, not left as an unhandled DB constraint violation",
+			],
+			security: [
+				"ADMIN-gated, which bounds who can register a target; server additionally resolves the hostname at registration time and rejects (400) targets resolving to private/loopback/link-local ranges or the cloud metadata address (169.254.169.254) — this narrows but does not eliminate SSRF risk (DNS can still change post-registration), which remains an accepted residual scope limitation for this project",
+			],
 			rateLimit: "10 req/min",
 			realtime: "None",
 			fallback: "Delivery failures are silent",
@@ -83,7 +93,7 @@ export const WEBHOOKS_ENDPOINTS =
 		},
 		group: "Webhooks",
 		tables: ["webhooks"],
-		tables_actions: "Delete",
+		tables_actions: { webhooks: "Delete" },
 		constraints: {
 			criteria: [],
 			security: [],
