@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { PAGES } from "../data";
+import { isPhone } from "../utils/device.js";
 import useOpenState from "../hooks/useOpenState.js";
 import { HotkeyScope } from "../hooks/HotkeyScope";
 import groupBy from "../utils/groupBy.js";
@@ -82,6 +83,7 @@ export default function PagesView({ highlightPageId, highlightEndpointId })
 
 	useEffect(() =>
 	{
+		if (isPhone) return;
 		function handleKeyDown(e)
 		{
 			if (e.key !== "Escape") return;
@@ -117,9 +119,11 @@ export default function PagesView({ highlightPageId, highlightEndpointId })
 			<div className="panel-title">Pages</div>
 			<div className="panel-sub">
 				{PAGES.length} routes in the application
-				<span className="panel-sub-shortcuts">
-					<kbd>Esc</kbd> collapse one level · <kbd>Shift</kbd>+<kbd>Esc</kbd> collapse all · <kbd>1</kbd>-<kbd>9</kbd> collapse item
-				</span>
+				{!isPhone && (
+					<span className="panel-sub-shortcuts">
+						<kbd>Esc</kbd> collapse one level · <kbd>Shift</kbd>+<kbd>Esc</kbd> collapse all · <kbd>1</kbd>-<kbd>9</kbd> collapse item
+					</span>
+				)}
 			</div>
 
 			<HotkeyScope>

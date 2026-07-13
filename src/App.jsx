@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import "./App.css";
 import { ENDPOINTS, PAGES } from "./data";
+import { isPhone } from "./utils/device.js";
 import EndpointsView from "./views/EndpointsView.jsx";
 import PagesView from "./views/PagesView.jsx";
 import CommandPalette from "./components/CommandPalette.jsx";
@@ -36,6 +37,7 @@ export default function App()
 
 	useEffect(() =>
 	{
+		if (isPhone) return;
 		const handler = (e) =>
 		{
 			// ⌘K / Ctrl+K — open command palette
@@ -70,7 +72,12 @@ export default function App()
 		<div className="layout">
 			<header className="topbar">
 				<div className="topbar-brand">
-					<span className="wordmark">Vigil</span>
+					<span className="wordmark">
+						Vigil
+						<span className="wordmark-sparkle wordmark-sparkle--1" aria-hidden="true" />
+						<span className="wordmark-sparkle wordmark-sparkle--2" aria-hidden="true" />
+						<span className="wordmark-sparkle wordmark-sparkle--3" aria-hidden="true" />
+					</span>
 					<span className="tagline">Technical Spec</span>
 				</div>
 
@@ -85,7 +92,7 @@ export default function App()
 							<span className="tab-btn-count">
 								{t === "endpoints" ? ENDPOINTS.length : PAGES.length}
 							</span>
-							{tab !== t && (
+							{tab !== t && !isPhone && (
 								<kbd className="tab-btn-shortcut">{isMac ? "⌥" : "Alt+"}{i + 1}</kbd>
 							)}
 						</button>
@@ -95,7 +102,9 @@ export default function App()
 				<button className="pal-trigger" onClick={() => setPaletteOpen(true)}>
 					<span className="pal-trigger-icon">⌕</span>
 					<span className="pal-trigger-text">Jump to…</span>
-					<kbd className="pal-trigger-kbd">{isMac ? "⌘K" : "Ctrl+K"}</kbd>
+					{!isPhone && (
+						<kbd className="pal-trigger-kbd">{isMac ? "⌘K" : "Ctrl+K"}</kbd>
+					)}
 				</button>
 			</header>
 

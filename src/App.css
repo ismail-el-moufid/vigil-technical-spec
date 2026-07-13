@@ -91,13 +91,91 @@ body {
 }
 
 .wordmark {
+	position: relative;
+	display: inline-block;
 	font-family: var(--font-sans);
 	font-size: 13px;
 	font-weight: 800;
 	letter-spacing: 0.25em;
 	text-transform: uppercase;
-	color: var(--accent);
 	white-space: nowrap;
+
+	background: linear-gradient(
+		100deg,
+		var(--accent) 0%,
+		var(--accent) 38%,
+		#f4fffb 48%,
+		#ffffff 50%,
+		#f4fffb 52%,
+		var(--accent) 62%,
+		var(--accent) 100%
+	);
+	background-size: 250% 100%;
+	background-position: 200% 0;
+	-webkit-background-clip: text;
+	background-clip: text;
+	color: transparent;
+	-webkit-text-fill-color: transparent;
+	animation: wordmark-shimmer 6.5s linear infinite;
+}
+
+@keyframes wordmark-shimmer {
+	0% {
+		background-position: 200% 0;
+	}
+	100% {
+		background-position: -100% 0;
+	}
+}
+
+.wordmark-sparkle {
+	position: absolute;
+	top: 50%;
+	width: 2px;
+	height: 2px;
+	border-radius: 50%;
+	background: #ffffff;
+	box-shadow:
+		0 0 2px 0.5px var(--accent),
+		0 0 4px 1px rgba(0, 255, 179, 0.45);
+	opacity: 0;
+	pointer-events: none;
+	animation: wordmark-twinkle 6.5s linear infinite;
+}
+
+.wordmark-sparkle--1 {
+	left: 14%;
+	top: 38%;
+	animation-delay: 0.1s;
+}
+
+.wordmark-sparkle--2 {
+	left: 50%;
+	top: 62%;
+	animation-delay: 2.25s;
+}
+
+.wordmark-sparkle--3 {
+	left: 82%;
+	top: 42%;
+	animation-delay: 4.4s;
+}
+
+@keyframes wordmark-twinkle {
+	0%,
+	94%,
+	100% {
+		opacity: 0;
+		transform: translateY(-50%) scale(0.4);
+	}
+	2% {
+		opacity: 1;
+		transform: translateY(-50%) scale(1.1);
+	}
+	4.5% {
+		opacity: 0;
+		transform: translateY(-50%) scale(0.4);
+	}
 }
 
 .tagline {
@@ -451,6 +529,13 @@ body {
 	border-radius: 8px;
 	position: relative;
 	background: transparent;
+	/* Fieldsets carry a UA-stylesheet default of min-width: min-content
+	   (min-inline-size: min-content), which applies even to a plain
+	   block-level fieldset with no flex/grid ancestor. Left unset, the
+	   box refuses to shrink below the min-content width of its nested
+	   content (e.g. ep-meta-grid / pre payload blocks), forcing genuine
+	   overflow independent of the grid/flex min-width:0 fixes. */
+	min-width: 0;
 }
 
 .group-hd {
@@ -658,6 +743,9 @@ body {
 	border-radius: 8px;
 	position: relative;
 	background: transparent;
+	/* See .group-section: fieldsets default to min-width: min-content
+	   in the UA stylesheet, independent of any flex/grid ancestor. */
+	min-width: 0;
 }
 
 .meta-group-hd {
@@ -1697,4 +1785,168 @@ body {
 	font-size: 10px;
 	color: var(--text2);
 	font-style: italic;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   RESPONSIVE
+   Everything above this line is untouched at desktop widths — every rule in
+   this block only fires below its breakpoint, so nothing here changes the
+   >1024px experience. Three tiers: tablet (≤1024px) tightens spacing only;
+   large phone (≤760px) starts reflowing rows that no longer fit; small
+   phone (≤480px) trims chrome and font sizes to keep everything legible.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 1024px) {
+	.main {
+		padding: 24px 20px;
+	}
+
+	.group-hd {
+		margin-left: 12px;
+	}
+
+	.ep-meta-grid,
+	.ep-card-meta-line,
+	.ep-section-head {
+		margin-left: 4px;
+	}
+
+	.pal-backdrop {
+		padding-top: 90px;
+	}
+}
+
+@media (max-width: 760px) {
+	.topbar {
+		padding: 0 14px;
+		gap: 12px;
+	}
+
+	.tagline {
+		display: none;
+	}
+
+	.pal-trigger-text {
+		display: none;
+	}
+
+	.pal-trigger {
+		padding: 6px 8px;
+	}
+
+	.topbar-tabs {
+		overflow-x: auto;
+		scrollbar-width: none;
+	}
+
+	.topbar-tabs::-webkit-scrollbar {
+		display: none;
+	}
+
+	.tab-btn {
+		padding: 0 10px;
+	}
+
+	.panel-title {
+		font-size: 20px;
+	}
+
+	.panel-sub {
+		margin-bottom: 20px;
+	}
+
+	.panel-sub-shortcuts {
+		display: none;
+	}
+
+	.pal-backdrop {
+		padding-top: 64px;
+	}
+
+	/* Route no longer fits beside badge + toggle + collapse-attrs button on
+	   one line — drop it to its own full-width row instead of letting the
+	   flex row squeeze it. */
+	.ep-card-header {
+		flex-wrap: wrap;
+		row-gap: 8px;
+	}
+
+	.ep-route {
+		flex-basis: 100%;
+		order: 3;
+		min-width: 0;
+		overflow-wrap: anywhere;
+		font-size: 13px;
+	}
+
+	.ep-card-collapse-btn {
+		order: 4;
+	}
+
+	.schema-col-name,
+	.schema-col-type,
+	.schema-col-flags {
+		min-width: 0;
+	}
+
+	.meta-value {
+		overflow-wrap: anywhere;
+	}
+}
+
+@media (max-width: 480px) {
+	.main {
+		padding: 16px 12px;
+	}
+
+	.topbar {
+		gap: 8px;
+		padding: 0 10px;
+	}
+
+	.wordmark {
+		font-size: 11.5px;
+		letter-spacing: 0.18em;
+	}
+
+	.pal-trigger-kbd {
+		display: none;
+	}
+
+	.pal-trigger-icon {
+		font-size: 14px;
+	}
+
+	.group-hd-label,
+	.meta-group-label {
+		font-size: 11px;
+	}
+
+	.ep-route {
+		font-size: 12px;
+	}
+
+	.badge {
+		min-width: 40px;
+		font-size: 10px;
+		padding: 3px 5px;
+	}
+
+	.group-hd-collapse-btn {
+		font-size: 9px;
+		max-width: 110px;
+	}
+
+	.pal-backdrop {
+		padding-top: 40px;
+	}
+
+	.shape-pre {
+		font-size: 11px;
+	}
+
+	.query-param-pill,
+	.cookie-pill {
+		font-size: 10.5px;
+	}
 }

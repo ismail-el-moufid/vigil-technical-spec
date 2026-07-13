@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { isPhone } from "../utils/device.js";
 
 /**
  * Contexts and hook half of the collapse-hotkey system. Split out of
@@ -59,6 +60,8 @@ export function useCollapseHotkey(isOpen, onCollapse)
 		api.update(id, isOpen, stableCollapse);
 	}, [api, id, isOpen, stableCollapse]);
 
-	if (!api || !isOpen) return null;
+	// No keyboard on phones (in general) to press Cmd/Ctrl+digit with, so
+	// don't bother surfacing a badge there.
+	if (!api || !isOpen || isPhone) return null;
 	return numberOf(id);
 }

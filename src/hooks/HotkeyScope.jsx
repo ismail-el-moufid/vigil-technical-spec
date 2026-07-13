@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { HotkeyApiContext, HotkeyNumberContext } from "./useCollapseHotkey";
+import { isPhone } from "../utils/device.js";
 
 /**
  * Per-collapsible numbered hotkeys.
@@ -105,6 +106,7 @@ export function HotkeyScope({ children })
 
 	useEffect(() =>
 	{
+		if (isPhone) return;
 		function handleKeyDown(e)
 		{
 			if (!/^[1-9]$/.test(e.key)) return;

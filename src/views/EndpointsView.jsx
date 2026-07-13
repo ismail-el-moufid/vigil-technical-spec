@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { ENDPOINTS } from "../data";
+import { isPhone } from "../utils/device.js";
 import useOpenState from "../hooks/useOpenState.js";
 import { HotkeyScope } from "../hooks/HotkeyScope";
 import MetaGroupSection from "../components/MetaGroupSection.jsx";
@@ -93,6 +94,7 @@ export default function EndpointsView({ highlightId })
 
 	useEffect(() =>
 	{
+		if (isPhone) return;
 		function handleKeyDown(e)
 		{
 			if (e.key !== "Escape") return;
@@ -178,9 +180,11 @@ export default function EndpointsView({ highlightId })
 			<div className="panel-title">Endpoints</div>
 			<div className="panel-sub">
 				{ENDPOINTS.length} total across all services
-				<span className="panel-sub-shortcuts">
-					<kbd>Esc</kbd> collapse one level · <kbd>Shift</kbd>+<kbd>Esc</kbd> collapse all · <kbd>1</kbd>-<kbd>9</kbd> collapse item
-				</span>
+				{!isPhone && (
+					<span className="panel-sub-shortcuts">
+						<kbd>Esc</kbd> collapse one level · <kbd>Shift</kbd>+<kbd>Esc</kbd> collapse all · <kbd>1</kbd>-<kbd>9</kbd> collapse item
+					</span>
+				)}
 			</div>
 
 			<HotkeyScope>

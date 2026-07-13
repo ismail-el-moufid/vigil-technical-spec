@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { ENDPOINTS, PAGES } from "../data";
 import Badge from "./ui/Badge.jsx";
+import { isPhone } from "../utils/device.js";
 
 function highlight(text, query)
 {
@@ -114,7 +115,7 @@ export default function CommandPalette({ open, onClose, onNavigate })
 						onChange={handleQueryChange}
 						onKeyDown={handleKey}
 					/>
-					<kbd className="pal-esc-hint">esc</kbd>
+					{!isPhone && <kbd className="pal-esc-hint">esc</kbd>}
 				</div>
 				{results.length > 0 && (
 					<div className="pal-list" ref={listRef}>
@@ -147,11 +148,13 @@ export default function CommandPalette({ open, onClose, onNavigate })
 				{results.length === 0 && query && (
 					<div className="pal-empty">No results for <em>{query}</em></div>
 				)}
-				<div className="pal-footer">
-					<span><kbd>↑↓</kbd> navigate</span>
-					<span><kbd>↵</kbd> jump</span>
-					<span><kbd>esc</kbd> close</span>
-				</div>
+				{!isPhone && (
+					<div className="pal-footer">
+						<span><kbd>↑↓</kbd> navigate</span>
+						<span><kbd>↵</kbd> jump</span>
+						<span><kbd>esc</kbd> close</span>
+					</div>
+				)}
 			</div>
 		</div>
 	);
