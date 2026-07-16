@@ -60,6 +60,7 @@ export const AUTH_ENDPOINTS =
 			[
 				"Hashed/salted passwords",
 				"Frontend + backend validation",
+				"400 returned if email is missing or not a string, or password is missing or not a string — this endpoint does not apply ep-users-create's well-formed-address format rule to email, only a presence/type check: the account being created here always has a fresh, empty users table, so there's no uniqueness collision to protect against and format-checking is left to the frontend for this one-time bootstrap flow",
 				"Server checks for an existing row in users before insert — if any user already exists, returns 409 rather than creating a second admin. This is the actual enforcement behind the 'shown only before any user exists' rule described on the Setup page; the frontend route guard is a UX convenience on top of it, not the source of truth",
 				"On the non-409 path: one users row is inserted for the new admin (the Read above is only the existence check, not a substitute for this insert) — tables_actions lists this as 'Read + Insert' for the users table specifically",
 			],
@@ -256,6 +257,7 @@ export const AUTH_ENDPOINTS =
 					}
 				]
 			},
+			400: "{ error: '<validation message>' }",
 			401: "{ error: 'unauthorized' }",
 			403: "{ error: 'forbidden' }",
 			404: "{ error: 'not found' }",
@@ -268,7 +270,9 @@ export const AUTH_ENDPOINTS =
 			refresh_tokens: "Update (revoked, cascaded from the session revoke)"
 		},
 		constraints: {
-			criteria: [],
+			criteria: [
+				"400 returned if the {id} path segment isn't a syntactically valid UUID — malformed path params are rejected the same way as malformed query params or body fields elsewhere in this spec, not left to fall through to an unhandled 500 or a misleading 404",
+			],
 			security:
 			[
 				"Service layer validates refresh cookie — only the owning user can revoke their own sessions (403 if session.user_id !== requesting user)",

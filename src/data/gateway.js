@@ -24,6 +24,7 @@ export const AUTH_STRATEGIES =
 			"AuthFilter validates signature and expiry only, then sets the SecurityContext principal — no DB hit on every request",
 			"On expiry the next API call returns 401; frontend calls /api/auth/refresh which validates the refresh_token cookie against the refresh_tokens table, rotates the row, and reissues a new access token and refresh cookie",
 			"Claims in a live access token are explicitly designed to lag DB state until the next refresh — the tradeoff for no DB hit on every request. Scope of the re-check: 'admin endpoints' means every endpoint whose requiredRole is ADMIN, GET included, not writes only — a demoted admin's still-live token gets a 403 on their very next call to any ADMIN-tier route (e.g. GET /api/config/keys, GET /api/users), it just isn't caught until that next request happens, per the claims-lag tradeoff above. ADMIN_/_VIEWER-tier reads are not re-checked beyond signature/expiry, since any authenticated role already satisfies them",
+			"The same claims-lag tradeoff applies to account deletion (ep-users-delete), not just demotion: deleting a user cascades their sessions/refresh_tokens rows immediately (their next /api/auth/refresh fails), but does not and cannot revoke an access token already issued to them, since AuthFilter never hits the DB per request. A just-deleted user (including a self-deleted admin) can keep making authenticated calls on that still-valid token, indistinguishable from any other valid JWT, until it naturally expires — up to the full 15-minute TTL. Accepted as the same tradeoff already made for demotion above, not a separate gap",
 			"Signing key: HMAC secret sourced from a Spring Boot @ConfigurationProperties bean (vigil.jwt-secret) — auto-generated as a random secret at startup via @PostConstruct and held in memory only if the property is left unset. This in-memory default is a dev-mode convenience, not the production design: a restart or a multi-instance deployment where vigil.jwt-secret isn't set identically everywhere invalidates every outstanding access token silently (the instance that issued it and the instance validating it disagree on the secret). Accepted for this project's scope; production deployment requires vigil.jwt-secret to be set explicitly and identically across instances",
 		],
 	},
@@ -181,7 +182,12 @@ export const ROLE_ENFORCEMENT_INFO =
 			tag: "NO AUTH",
 			tagType: "permit",
 			label: "No authentication required — permitAll()",
-			items: [],
+			items:
+			[
+				"POST /api/auth/setup · POST /api/auth/login",
+				"POST /api/auth/refresh · POST /api/auth/logout",
+				"GET /api/auth/sessions · DELETE /api/auth/sessions/{id}",
+			],
 		},
 	],
 };

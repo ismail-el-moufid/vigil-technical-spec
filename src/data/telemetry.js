@@ -56,10 +56,11 @@ export const TELEMETRY_ENDPOINTS =
 		constraints: {
 			criteria:
 			[
+				"Data and Analytics Major Dashboard (2pt)",
 				"Infinite scroll via keyset (cursor) pagination on timestamp, not offset — avoids row skip/duplicate drift as new metrics continuously insert ahead of the page",
 				"count defaults to 50 when omitted (json mode only; ignored under format=csv); hasMore derived server-side: returned.length === count",
 				"400 returned if count is present but non-numeric or outside 1-500, or before is present but not a valid ISO8601 timestamp",
-				"Status page passes ?vigil.internal=true for infra metrics panel — intentional dual-call (service vs infra).",
+				"Status page passes ?vigil.internal=true for infra metrics panel — intentional dual-call (service vs infra). Fulfils DevOps Minor Health check + status page (1pt)",
 				"format=csv ignores count/before/offset and returns every row matching period/service/vigil.internal as one unpaginated CSV response — this is the actual mechanism behind the page's 'CSV export' feature, distinct from the paginated JSON view. Not exempt from the standard bucket, but doesn't need to be: the DEFAULT bucket (10 tokens, +10/60s, keyed by client IP) counts requests, not rows, so this one unpaginated response still consumes exactly one token, same as any small paginated GET",
 			],
 			security: [],
@@ -113,6 +114,7 @@ export const TELEMETRY_ENDPOINTS =
 		constraints: {
 			criteria:
 			[
+				"Data export (1pt)",
 				"Default (time-descending) infinite scroll uses keyset pagination via 'before' — avoids row skip/duplicate drift under continuous inserts",
 				"Non-default sort falls back to 'offset'; drift under continuous inserts is an accepted limitation in that mode only, since sorted-but-not-by-time views are inherently harder to cursor",
 				"count defaults to 50 when omitted (json mode only; ignored under format=csv); hasMore derived server-side: returned.length === count",
@@ -200,6 +202,8 @@ export const TELEMETRY_ENDPOINTS =
 		constraints: {
 			criteria:
 			[
+				"Web Minor Advanced search (1pt)",
+				"Data export (1pt)",
 				"Default (time-descending) infinite scroll uses keyset pagination via 'before' — avoids row skip/duplicate drift under continuous inserts",
 				"Non-default sort falls back to 'offset'; drift under continuous inserts is an accepted limitation in that mode only, since sorted-but-not-by-time views are inherently harder to cursor",
 				"count defaults to 50 when omitted (json mode only; ignored under format=csv); hasMore derived server-side: returned.length === count",

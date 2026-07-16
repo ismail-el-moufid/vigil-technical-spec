@@ -103,6 +103,7 @@ export const WEBHOOKS_ENDPOINTS =
 		response:
 		{
 			204: "Empty response",
+			400: "{ error: '<validation message>' }",
 			401: "{ error: 'unauthorized' }",
 			403: "{ error: 'admin role required' }",
 			404: "{ error: 'webhook not found' }",
@@ -113,7 +114,9 @@ export const WEBHOOKS_ENDPOINTS =
 		tables: ["webhooks"],
 		tables_actions: { webhooks: "Delete" },
 		constraints: {
-			criteria: [],
+			criteria: [
+				"400 returned if the {id} path segment isn't a syntactically valid UUID — malformed path params are rejected the same way as malformed query params or body fields elsewhere in this spec, not left to fall through to an unhandled 500 or a misleading 404",
+			],
 			security: [],
 			rateLimit: "10 req/min",
 			realtime: "None",

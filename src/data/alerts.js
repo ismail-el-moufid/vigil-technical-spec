@@ -241,6 +241,7 @@ export const ALERT_ENDPOINTS =
 				"400 returned if aggregation is present and the target row's signal_type is logs | traces (aggregation is only settable on metrics rules), or if aggregation is present but not one of the fixed enum when signal_type = metrics",
 				"400 returned if window_seconds is present but non-numeric, non-integer, or less than 10",
 				"Both 403 causes share the status code but carry distinct 'code' values (ADMIN_REQUIRED vs DEFAULT_RULE_PROTECTED) — clients should branch on 'code', not on the 'error' message text",
+				"400 returned if the {id} path segment isn't a syntactically valid UUID — malformed path params are rejected the same way as malformed body fields above, not left to fall through to an unhandled 500 or a misleading 404",
 			],
 			security: [
 				"Caller must hold ADMIN role (this endpoint's requiredRole, shown on the Role pill above); among admins there is no per-service ownership scoping — any admin may update any rule"
@@ -263,6 +264,7 @@ export const ALERT_ENDPOINTS =
 		response:
 		{
 			204: "Empty response",
+			400: "{ error: '<validation message>' }",
 			401: "{ error: 'unauthorized' }",
 			403: "{ error: 'admin role required', code: 'ADMIN_REQUIRED' } | { error: 'cannot delete a default rule', code: 'DEFAULT_RULE_PROTECTED' }",
 			404: "{ error: 'rule not found' }",
@@ -270,12 +272,17 @@ export const ALERT_ENDPOINTS =
 			500: "{ error: 'server error' }",
 		},
 		group: "Alerts",
-		tables: ["alert_rules"],
-		tables_actions: { alert_rules: "Delete" },
+		tables: ["alert_rules", "alert_history"],
+		tables_actions: {
+			alert_rules: "Delete",
+			alert_history: "Update (rule_id set to NULL on any referencing rows, via schema's ON DELETE SET NULL — not a separate application-level step)"
+		},
 		constraints: {
 			criteria: [
 				"If is_default: true on the target row, request is rejected with 403 — default rules cannot be deleted, only disabled via PATCH { enabled: false }",
 				"Both 403 causes share the status code but carry distinct 'code' values (ADMIN_REQUIRED vs DEFAULT_RULE_PROTECTED) — clients should branch on 'code', not on the 'error' message text",
+				"Deleting a non-default rule cascades into alert_history: every row whose rule_id referenced this rule has rule_id set to NULL (schema-level ON DELETE SET NULL). Those rows' snapshotted metric_name/threshold/severity/etc. are untouched — only rule_id changes. This produces the same null-rule_id shape as a silence-watchdog alert; see schema.js's alert_history.rule_id note for how consumers distinguish the two",
+				"400 returned if the {id} path segment isn't a syntactically valid UUID — malformed path params are rejected the same way as malformed query params or body fields elsewhere in this spec, not left to fall through to an unhandled 500 or a misleading 404",
 			],
 			security: [
 				"Caller must hold ADMIN role (this endpoint's requiredRole, shown on the Role pill above); among admins there is no per-service ownership scoping — any admin may delete any rule"
@@ -319,6 +326,7 @@ export const ALERT_ENDPOINTS =
 				"Same service method as WebSocket ack",
 				"Upserts on (alert_id, user_id) — re-acking updates the caller's own record, does not create duplicates, and survives the caller later changing their own email",
 				"This REST path and the WS ack frame have independent rate-limit buckets (10 req/min per-IP here vs 10 req/min per-session on the socket). Not a practical double-budget: the frontend only ever acks over its own already-open /api/alerts/ws connection — it holds a single long-lived socket per session for exactly this; this REST endpoint exists for API-key clients that aren't holding a socket open, so in normal use only one bucket is ever exercised per caller",
+				"400 returned if the {id} path segment isn't a syntactically valid UUID, same as the existing 400 for a malformed status field — malformed path params get the same treatment as malformed body fields, not an unhandled 500 or a misleading 404",
 			],
 			security: [
 				"Any authenticated user may ack any alert — no per-service ownership scoping; ack is scoped to the caller's own user_id (resolved from the auth token, never client-supplied), cannot ack on behalf of another user"
