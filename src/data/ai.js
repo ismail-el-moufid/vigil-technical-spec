@@ -31,7 +31,6 @@ export const AI_ENDPOINTS =
 		constraints: {
 			criteria:
 			[
-				"AI Major LLM interface + streaming (2pt)",
 				"Frontend sends full conversation history each turn. Server maintains no turn state.",
 				"Spring Boot proxies the chunked response from FastAPI directly to the client",
 				"This endpoint answers only from the conversation history in the request body — it does not query logs/metrics/traces itself. Telemetry-grounded analysis is a distinct, internal-only flow triggered by alert evaluation, not by this endpoint: Spring Boot forwards { alert_id, service, triggered_at, context: { logs[], metrics[], traces[] } } to FastAPI at /internal/llm/forward, and that context field is what carries the actual telemetry rows into the LLM prompt. This endpoint's own request body (messages: [{ role, content }]) has no equivalent field, so it has no basis to read those tables",
