@@ -18,7 +18,7 @@ export const USERS_ENDPOINTS =
 		tables: ["users"],
 		tables_actions: { users: "Read" },
 		constraints: {
-			criteria: ["User Management Major (2pt)"],
+			criteria: [],
 			security: [],
 			rateLimit: "10 req/min",
 			realtime: "None",
@@ -71,7 +71,6 @@ export const USERS_ENDPOINTS =
 		tables_actions: { users: "Insert" },
 		constraints: {
 			criteria: [
-				"User Management Major (2pt)",
 				"409 returned if email collides with the existing unique constraint on users.email — checked before insert, not left as an unhandled DB constraint violation",
 				"400 returned if role is present but not one of admin | viewer — same validation pattern as severity on the alert rules endpoints",
 			],
