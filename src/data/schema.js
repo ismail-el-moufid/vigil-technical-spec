@@ -173,7 +173,7 @@ export const SCHEMA =
 			{
 				name: "window_seconds",
 				type: "INTEGER",
-				notes: "how far back from the triggering batch's latest timestamp the evaluator looks when computing this rule's aggregate, for all three signal_types uniformly — this is the field that makes logs/traces/metrics evaluation symmetric; previously logs/traces referenced an undefined 'configured time window' with no backing column, and metrics had no window concept at all. Required at create time, minimum 10 (400 below that). Not the same knob as vigil.silence-timeout-seconds (internal.js): that config is how long a service can go without ANY batch before the separate silence watchdog fires; window_seconds is how far back a single threshold rule looks once a batch does arrive — the two are unrelated and can differ freely"
+				notes: "how far back from the triggering batch's latest timestamp the evaluator looks when computing this rule's aggregate, for all three signal_types uniformly — this is the field that makes logs/traces/metrics evaluation symmetric; previously logs/traces referenced an undefined 'configured time window' with no backing column, and metrics had no window concept at all. Required at create time, minimum 10 (400 below that). Not the same knob as vigil.silence-timeout-seconds: that config is how long a service can go without ANY batch before the separate silence watchdog fires; window_seconds is how far back a single threshold rule looks once a batch does arrive — the two are unrelated and can differ freely"
 			},
 			{
 				name: "threshold",
@@ -214,7 +214,7 @@ export const SCHEMA =
 				type: "UUID",
 				fk: { table: "alert_rules", column: "id", onDelete: "SET NULL" },
 				nullable: true,
-				notes: "SET NULL, not CASCADE — alert_history is a historical record; deleting the rule that produced a past alert should not delete the alert. Non-default alert_rules rows are deletable (default rows can only be disabled, never deleted), so this is the one FK in this schema where the parent side actually needs a story. null is genuinely ambiguous on its own — it means EITHER 'rule since deleted' (this SET NULL firing) OR 'no rule ever matched' (a silence-watchdog alert, which never had an alert_rules row to begin with — see internal.js). The two cases are distinguished by metric_name, not by rule_id: metric_name === 'service_silent' is the silence-watchdog case; any other metric_name with rule_id === null is the deleted-rule case. Consumers must branch on metric_name, not treat null rule_id as self-describing"
+				notes: "SET NULL, not CASCADE — alert_history is a historical record; deleting the rule that produced a past alert should not delete the alert. Non-default alert_rules rows are deletable (default rows can only be disabled, never deleted), so this is the one FK in this schema where the parent side actually needs a story. null is genuinely ambiguous on its own — it means EITHER 'rule since deleted' (this SET NULL firing) OR 'no rule ever matched' (a silence-watchdog alert — fired when a service goes quiet for too long, never backed by an alert_rules row to begin with). The two cases are distinguished by metric_name, not by rule_id: metric_name === 'service_silent' is the silence-watchdog case; any other metric_name with rule_id === null is the deleted-rule case. Consumers must branch on metric_name, not treat null rule_id as self-describing"
 			},
 			{
 				name: "service",

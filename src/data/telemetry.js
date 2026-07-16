@@ -31,7 +31,7 @@ export const TELEMETRY_ENDPOINTS =
 				},
 				{
 					name: "vigil.internal",
-					type: "boolean — filters on attributes['internal'] = 'true' in the metrics row's attributes Map (schema.js); there is no first-class 'internal' column on the metrics table, so this is an attribute-key lookup, not a column filter. Rows without an 'internal' attribute key are treated as vigil.internal=false",
+					type: "boolean — filters on attributes['internal'] = 'true' in the metrics row's attributes Map; there is no first-class 'internal' column on the metrics table, so this is an attribute-key lookup, not a column filter. Rows without an 'internal' attribute key are treated as vigil.internal=false",
 					required: false
 				},
 				{
@@ -359,7 +359,7 @@ export const TELEMETRY_ENDPOINTS =
 		},
 		constraints: {
 			criteria: [
-				"Used by ADMIN callers to validate custom alert rule attributes when creating/editing metrics-type rules — the form behind POST/PATCH /api/alerts/rules checks a submitted metric_name against this endpoint's key/value list before allowing a signal_type = metrics rule to be saved (those two write endpoints are ADMIN-only). Not used for signal_type = logs | traces rules — metric_name there is validated against a fixed enum baked into the endpoints themselves (see alert_rules.metric_name in schema.js), not against this dynamic key list",
+				"Used by ADMIN callers to validate custom alert rule attributes when creating/editing metrics-type rules — the form behind POST/PATCH /api/alerts/rules checks a submitted metric_name against this endpoint's key/value list before allowing a signal_type = metrics rule to be saved (those two write endpoints are ADMIN-only). Not used for signal_type = logs | traces rules — metric_name there is validated against a fixed enum baked into the endpoints themselves, not against this dynamic key list",
 				"Also used by VIEWER callers to power search/filter-suggestion dropdowns on the telemetry views (logs/traces/metrics pages) — this is the reason the role grant is ADMIN_/_VIEWER rather than ADMIN-only; confirmed intentional, not over-scoped",
 			],
 			security: [],

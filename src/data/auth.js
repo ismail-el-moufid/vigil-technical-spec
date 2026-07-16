@@ -15,8 +15,8 @@ const REFRESH_TOKEN_COOKIE =
 	// short enough to bound the exposure window of a stolen cookie given the
 	// reuse-detection story below (a leaked-but-unused token is only viable
 	// for this long). Paired with the 15-minute access-token TTL declared on
-	// AUTH_STRATEGIES.JWT in gateway.js — that's the window "claims lag DB
-	// state" actually means in practice.
+	// AUTH_STRATEGIES.JWT — that's the window "claims lag DB state" actually
+	// means in practice.
 	maxAge: "30d",
 };
 

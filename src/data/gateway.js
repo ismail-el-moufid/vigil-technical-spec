@@ -70,10 +70,9 @@ export const AUTH_STRATEGIES =
 //
 // Scope: this chain governs the PUBLIC port only. /internal/* routes are
 // bound to a separate, network-isolated port on the same Spring Boot
-// deployable (see AUTH_STRATEGIES.INTERNAL_ONLY and the internal.js header
-// comment) and do not pass through CorsFilter, RateLimitFilter, or
-// AuthFilter at all — isolation there is enforced at the network/port
-// level, not by this chain.
+// deployable (see AUTH_STRATEGIES.INTERNAL_ONLY) and do not pass through
+// CorsFilter, RateLimitFilter, or AuthFilter at all — isolation there is
+// enforced at the network/port level, not by this chain.
 
 export const FILTER_CHAIN =
 [
@@ -136,7 +135,7 @@ export const RATE_LIMITING_INFO =
 		items:
 		[
 			"/internal/ingest/** — internal port, network-isolated; no HTTP rate limiting applies",
-			"/internal/llm/forward — same internal port, same network isolation; no HTTP rate limiting applies (previously undocumented here despite ep-fastapi-analyze in internal.js declaring rateLimit: 'N/A' — this entry closes that gap so the two files agree)",
+			"/internal/llm/forward — same internal port, same network isolation; no HTTP rate limiting applies",
 		],
 	},
 	{
@@ -154,7 +153,7 @@ export const RATE_LIMITING_INFO =
 
 export const ROLE_ENFORCEMENT_INFO =
 {
-	note: 'The filter resolves identity only — it answers "who is this?". Role checks (@PreAuthorize or explicit) live in the controller or service layer, not the filter. Alerts endpoints document their own requiredRole directly on each endpoint in alerts.js, rather than being listed here — keeps that fact in exactly one place instead of two that can drift apart. The roles below describe JWT-authenticated callers; a valid API_KEY satisfies every tier including ADMIN, since it carries no role of its own (see AUTH_STRATEGIES.API_KEY).',
+	note: 'The filter resolves identity only — it answers "who is this?". Role checks (@PreAuthorize or explicit) live in the controller or service layer, not the filter. Alerts endpoints document their own requiredRole directly on each endpoint, rather than being listed here — keeps that fact in exactly one place instead of two that can drift apart. The roles below describe JWT-authenticated callers; a valid API_KEY satisfies every tier including ADMIN, since it carries no role of its own (see AUTH_STRATEGIES.API_KEY).',
 	roles:
 	[
 		{
