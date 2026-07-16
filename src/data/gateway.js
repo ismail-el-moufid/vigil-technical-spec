@@ -57,6 +57,7 @@ export const AUTH_STRATEGIES =
 		label: "WebSocket, JWT validated at handshake via HandshakeInterceptor",
 		items:
 		[
+			"Resolves role/identity identically to AUTH_STRATEGIES.JWT, off the same signed claims — this is a JWT validated at a different point in the request lifecycle (HTTP Upgrade instead of every request's AuthFilter), not a distinct credential type or a fixed/implicit role",
 			"Token passed as ?token= on the upgrade request — same tradeoff as SSE (native WebSocket clients can't set an Authorization header either); accepted for this project",
 			"Connection rejected during the HTTP Upgrade if the token is invalid or missing — an unauthenticated client never completes the handshake, so there's no post-connect auth window or frame protocol",
 			"On token expiry, client reconnects with a fresh token; no mid-session re-auth frames",

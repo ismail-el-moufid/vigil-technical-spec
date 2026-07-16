@@ -186,6 +186,7 @@ export const ALERT_ENDPOINTS =
 				"Frontend may pre-fill this form from an existing rule's values (clone) — purely a frontend UX detail, no API shape change",
 				"400 returned if severity is present but not one of info | warning | critical — same validation pattern as role on the users endpoints",
 				"403 is returned when an authenticated caller lacks the ADMIN role — this endpoint's requiredRole is ADMIN, shown on the Role pill above",
+				"No dedup key: alert_rules carries no uniqueness constraint (schema.js), and this endpoint does not check for an existing rule with matching service/signal_type/metric_name/aggregation before insert — a retried or double-submitted POST creates a second, functionally-identical row rather than erroring or upserting. Accepted scope decision for this project: unlike ep-users-create/ep-webhooks-create (DB-unique-constraint-backed 409) or the ingest endpoints (explicit hash-based dedup window), duplicate rule creation here is treated as user/client error, not guarded against server-side. An admin who creates a duplicate rule can remove it via ep-alert-rules-delete same as any other non-default rule",
 			],
 			security: [
 				"Caller must hold ADMIN role (this endpoint's requiredRole, shown on the Role pill above); among admins there is no per-service ownership scoping — any admin may create a rule for any service"

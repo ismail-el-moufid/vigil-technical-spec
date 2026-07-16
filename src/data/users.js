@@ -105,6 +105,7 @@ export const USERS_ENDPOINTS =
 			criteria: [
 				"Identity resolved from the SecurityContext principal (JWT) — no path param, always the caller's own row",
 				"Closes the gap left by login/setup only returning { role, access_token }: this is the documented way the frontend gets its own id/email (e.g. to pre-fill the change-email form behind PATCH /api/users/me), rather than decoding the opaque access token client-side",
+				"Read grant is ADMIN_/_VIEWER here vs. ADMIN-only on ep-users-list (GET /api/users) — confirmed intentional, not over-scoped: this endpoint only ever returns the caller's own row (see above), so it carries none of the full-directory disclosure ep-users-list's ADMIN gate exists to prevent; same reasoning pattern as ep-alert-rules-list's and ep-telemetry-attributes' ADMIN_/_VIEWER grants",
 			],
 			security: [],
 			rateLimit: "10 req/min",

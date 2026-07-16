@@ -115,7 +115,7 @@ export const SCHEMA =
 				name: "token_hash",
 				type: "TEXT",
 				unique: true,
-				notes: "SHA-256 of the raw token; raw value never stored"
+				notes: "SHA-256 of the raw token; raw value never stored. No application-level pre-insert uniqueness check is specified for this column, unlike users.email/webhooks.url: a collision would require two distinct randomly-generated tokens hashing identically, which is cryptographically negligible. Accepted scope decision — relies on the DB constraint alone, deliberately, rather than an oversight"
 			},
 			{
 				name: "issued_at",
@@ -271,11 +271,14 @@ export const SCHEMA =
 			{
 				name: "alert_id",
 				type: "UUID",
-				fk: { table: "alert_history", column: "id" }
+				pk: true,
+				fk: { table: "alert_history", column: "id" },
+				notes: "no onDelete needed: no endpoint in this spec deletes alert_history rows (alerts are only acknowledged/resolved via ep-alert-ack, never removed), so this FK's parent is never actually deleted — unlike alert_rules, which is deletable and whose FK (alert_history.rule_id) does declare SET NULL"
 			},
 			{
 				name: "user_id",
 				type: "UUID",
+				pk: true,
 				fk: { table: "users", column: "id", onDelete: "CASCADE" },
 				notes: "keyed on the immutable users.id, not email — a user changing their email (PATCH /api/users/me or /api/users/{id}) must not orphan their own ack history"
 			},
