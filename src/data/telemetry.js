@@ -31,7 +31,7 @@ export const TELEMETRY_ENDPOINTS =
 				},
 				{
 					name: "vigil.internal",
-					type: "boolean",
+					type: "boolean — filters on attributes['internal'] = 'true' in the metrics row's attributes Map (schema.js); there is no first-class 'internal' column on the metrics table, so this is an attribute-key lookup, not a column filter. Rows without an 'internal' attribute key are treated as vigil.internal=false",
 					required: false
 				},
 				{
@@ -61,7 +61,7 @@ export const TELEMETRY_ENDPOINTS =
 				"count defaults to 50 when omitted (json mode only; ignored under format=csv); hasMore derived server-side: returned.length === count",
 				"400 returned if count is present but non-numeric or outside 1-500, or before is present but not a valid ISO8601 timestamp",
 				"Status page passes ?vigil.internal=true for infra metrics panel — intentional dual-call (service vs infra). Fulfils DevOps Minor Health check + status page (1pt)",
-				"format=csv ignores count/before/offset and returns every row matching period/service/vigil.internal as one unpaginated CSV response — this is the actual mechanism behind the page's 'CSV export' feature, distinct from the paginated JSON view. Not exempt from the standard bucket, but doesn't need to be — it consumes exactly one token like any other GET, since the limiter counts requests, not rows (see RATE_LIMITING_INFO.DEFAULT)",
+				"format=csv ignores count/before/offset and returns every row matching period/service/vigil.internal as one unpaginated CSV response — this is the actual mechanism behind the page's 'CSV export' feature, distinct from the paginated JSON view. Not exempt from the standard bucket, but doesn't need to be: the DEFAULT bucket (10 tokens, +10/60s, keyed by client IP) counts requests, not rows, so this one unpaginated response still consumes exactly one token, same as any small paginated GET",
 			],
 			security: [],
 			rateLimit: "10 req/min",
@@ -118,8 +118,8 @@ export const TELEMETRY_ENDPOINTS =
 				"Default (time-descending) infinite scroll uses keyset pagination via 'before' — avoids row skip/duplicate drift under continuous inserts",
 				"Non-default sort falls back to 'offset'; drift under continuous inserts is an accepted limitation in that mode only, since sorted-but-not-by-time views are inherently harder to cursor",
 				"count defaults to 50 when omitted (json mode only; ignored under format=csv); hasMore derived server-side: returned.length === count",
-				"400 returned if count/offset are present but non-numeric, or before is present but not a valid ISO8601 timestamp, or sort references an unknown field",
-				"format=csv ignores count/before/offset/sort and returns every row matching period/service as one unpaginated CSV response — this is the actual mechanism behind the page's 'CSV export' feature, distinct from the paginated JSON view. Not exempt from the standard bucket, but doesn't need to be — it consumes exactly one token like any other GET, since the limiter counts requests, not rows (see RATE_LIMITING_INFO.DEFAULT)",
+				"400 returned if count/offset are present but non-numeric or outside 1-500 (same bound as ep-telemetry-metrics), or before is present but not a valid ISO8601 timestamp, or sort references an unknown field",
+				"format=csv ignores count/before/offset/sort and returns every row matching period/service as one unpaginated CSV response — this is the actual mechanism behind the page's 'CSV export' feature, distinct from the paginated JSON view. Not exempt from the standard bucket, but doesn't need to be: the DEFAULT bucket (10 tokens, +10/60s, keyed by client IP) counts requests, not rows, so this one unpaginated response still consumes exactly one token, same as any small paginated GET",
 			],
 			security: [],
 			rateLimit: "10 req/min",
@@ -207,8 +207,8 @@ export const TELEMETRY_ENDPOINTS =
 				"Default (time-descending) infinite scroll uses keyset pagination via 'before' — avoids row skip/duplicate drift under continuous inserts",
 				"Non-default sort falls back to 'offset'; drift under continuous inserts is an accepted limitation in that mode only, since sorted-but-not-by-time views are inherently harder to cursor",
 				"count defaults to 50 when omitted (json mode only; ignored under format=csv); hasMore derived server-side: returned.length === count",
-				"400 returned if count/offset are present but non-numeric, or before is present but not a valid ISO8601 timestamp, or sort references an unknown field",
-				"format=csv ignores count/before/offset/sort and returns every row matching period/service/severity/search as one unpaginated CSV response — this is the actual mechanism behind the page's 'CSV export' feature, distinct from the paginated JSON view. Not exempt from the standard bucket, but doesn't need to be — it consumes exactly one token like any other GET, since the limiter counts requests, not rows (see RATE_LIMITING_INFO.DEFAULT)",
+				"400 returned if count/offset are present but non-numeric or outside 1-500 (same bound as ep-telemetry-metrics), or before is present but not a valid ISO8601 timestamp, or sort references an unknown field",
+				"format=csv ignores count/before/offset/sort and returns every row matching period/service/severity/search as one unpaginated CSV response — this is the actual mechanism behind the page's 'CSV export' feature, distinct from the paginated JSON view. Not exempt from the standard bucket, but doesn't need to be: the DEFAULT bucket (10 tokens, +10/60s, keyed by client IP) counts requests, not rows, so this one unpaginated response still consumes exactly one token, same as any small paginated GET",
 			],
 			security: [],
 			rateLimit: "10 req/min",
@@ -231,7 +231,7 @@ export const TELEMETRY_ENDPOINTS =
 			[
 				{ name: "service",  type: "string", required: false },
 				{ name: "severity", type: "string", required: false },
-				{ name: "token", type: "string", required: false },
+				{ name: "token", type: "string (the only auth channel for this connection — native EventSource cannot set an Authorization header, so this must be present or the Upgrade is rejected; same requirement as ep-alerts-ws's handshake token)", required: true },
 			],
 			body: null,
 		},
@@ -250,7 +250,7 @@ export const TELEMETRY_ENDPOINTS =
 			security: [
 				"Token passed as ?token= query param since native EventSource cannot set headers — accepted tradeoff for this project; token lands in server access logs and browser history. Same token as the Authorization header carries, still short-lived."
 			],
-			rateLimit: "N/A",
+			rateLimit: "Not exempt: the initial HTTP GET that opens this SSE stream consumes one token from the DEFAULT bucket (10 tokens, +10/60s, keyed by client IP), same as any other GET; once the stream is established, server-push frames over it are not further limited",
 			realtime: "SseEmitter per subscriber. Pushes matching new log records on each OTel batch. Accepts ?token= for JWT or API key (native EventSource cannot set headers).",
 			fallback: "Browser EventSource reconnects automatically",
 			dedup: "None",
@@ -269,7 +269,7 @@ export const TELEMETRY_ENDPOINTS =
 			query:
 			[
 				{ name: "service", type: "string", required: false },
-				{ name: "token",type: "string", required: false },
+				{ name: "token", type: "string (the only auth channel for this connection — native EventSource cannot set an Authorization header, so this must be present or the Upgrade is rejected; same requirement as ep-alerts-ws's handshake token)", required: true },
 			],
 			body: null,
 		},
@@ -288,7 +288,7 @@ export const TELEMETRY_ENDPOINTS =
 			security: [
 				"Token passed as ?token= query param since native EventSource cannot set headers — accepted tradeoff for this project; token lands in server access logs and browser history. Same token as the Authorization header carries, still short-lived."
 			],
-			rateLimit: "N/A",
+			rateLimit: "Not exempt: the initial HTTP GET that opens this SSE stream consumes one token from the DEFAULT bucket (10 tokens, +10/60s, keyed by client IP), same as any other GET; once the stream is established, server-push frames over it are not further limited",
 			realtime:
 				"SseEmitter per subscriber. Pushes matching new trace records on each OTel batch. Accepts ?token= for JWT or API key (native EventSource cannot set headers).",
 			fallback: "Browser EventSource reconnects automatically",
@@ -308,7 +308,7 @@ export const TELEMETRY_ENDPOINTS =
 			query:
 			[
 				{ name: "service", type: "string", required: false },
-				{ name: "token",type: "string", required: false },
+				{ name: "token", type: "string (the only auth channel for this connection — native EventSource cannot set an Authorization header, so this must be present or the Upgrade is rejected; same requirement as ep-alerts-ws's handshake token)", required: true },
 			],
 			body: null,
 		},
@@ -327,7 +327,7 @@ export const TELEMETRY_ENDPOINTS =
 			security: [
 				"Token passed as ?token= query param since native EventSource cannot set headers — accepted tradeoff for this project; token lands in server access logs and browser history. Same token as the Authorization header carries, still short-lived."
 			],
-			rateLimit: "N/A",
+			rateLimit: "Not exempt: the initial HTTP GET that opens this SSE stream consumes one token from the DEFAULT bucket (10 tokens, +10/60s, keyed by client IP), same as any other GET; once the stream is established, server-push frames over it are not further limited",
 			realtime:
 				"SseEmitter per subscriber. Pushes matching new metric records on each OTel batch. Accepts ?token= for JWT or API key (native EventSource cannot set headers).",
 			fallback: "Browser EventSource reconnects automatically",
@@ -358,7 +358,10 @@ export const TELEMETRY_ENDPOINTS =
 			traces: "Read (last 7 days)"
 		},
 		constraints: {
-			criteria: ["Used to validate custom alert rule attributes"],
+			criteria: [
+				"Used by ADMIN callers to validate custom alert rule attributes when creating/editing metrics-type rules — the form behind POST/PATCH /api/alerts/rules checks a submitted metric_name against this endpoint's key/value list before allowing a signal_type = metrics rule to be saved (those two write endpoints are ADMIN-only). Not used for signal_type = logs | traces rules — metric_name there is validated against a fixed enum baked into the endpoints themselves (see alert_rules.metric_name in schema.js), not against this dynamic key list",
+				"Also used by VIEWER callers to power search/filter-suggestion dropdowns on the telemetry views (logs/traces/metrics pages) — this is the reason the role grant is ADMIN_/_VIEWER rather than ADMIN-only; confirmed intentional, not over-scoped",
+			],
 			security: [],
 			rateLimit: "10 req/min",
 			realtime: "None",

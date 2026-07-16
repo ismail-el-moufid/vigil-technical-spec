@@ -19,11 +19,12 @@ export const AUTH_STRATEGIES =
 		label: "Authorization: Bearer <access_token>",
 		items:
 		[
-			"Short-lived; frontend holds it in memory only — never written to a cookie or localStorage, so it can't be read by an XSS payload",
+			"15-minute TTL — short-lived; frontend holds it in memory only — never written to a cookie or localStorage, so it can't be read by an XSS payload",
 			"Lost on hard refresh — this is the expected missing-token case; the boot guard calls /api/auth/refresh on every page load and falls back to /login or /setup on 401",
 			"AuthFilter validates signature and expiry only, then sets the SecurityContext principal — no DB hit on every request",
 			"On expiry the next API call returns 401; frontend calls /api/auth/refresh which validates the refresh_token cookie against the refresh_tokens table, rotates the row, and reissues a new access token and refresh cookie",
-			"Claims in a live access token are explicitly designed to lag DB state until the next refresh — the tradeoff for no DB hit on every request; privileged writes (admin endpoints) re-check role at request time rather than trust the token's claim",
+			"Claims in a live access token are explicitly designed to lag DB state until the next refresh — the tradeoff for no DB hit on every request. Scope of the re-check: 'admin endpoints' means every endpoint whose requiredRole is ADMIN, GET included, not writes only — a demoted admin's still-live token gets a 403 on their very next call to any ADMIN-tier route (e.g. GET /api/config/keys, GET /api/users), it just isn't caught until that next request happens, per the claims-lag tradeoff above. ADMIN_/_VIEWER-tier reads are not re-checked beyond signature/expiry, since any authenticated role already satisfies them",
+			"Signing key: HMAC secret sourced from a Spring Boot @ConfigurationProperties bean (vigil.jwt-secret) — auto-generated as a random secret at startup via @PostConstruct and held in memory only if the property is left unset. This in-memory default is a dev-mode convenience, not the production design: a restart or a multi-instance deployment where vigil.jwt-secret isn't set identically everywhere invalidates every outstanding access token silently (the instance that issued it and the instance validating it disagree on the secret). Accepted for this project's scope; production deployment requires vigil.jwt-secret to be set explicitly and identically across instances",
 		],
 	},
 	API_KEY: {
@@ -34,7 +35,7 @@ export const AUTH_STRATEGIES =
 		items:
 		[
 			"Program-level lifetime",
-			"generated at startup via @PostConstruct, held in memory",
+			"Sourced from a Spring Boot @ConfigurationProperties bean (vigil.api-key, vigil.ingestion-key); auto-generated as a UUID via @PostConstruct at startup and held in memory only if the property is left unset. Accepted dev-mode default for this project's scope, not a production design: a restart silently rotates the key (breaking any external caller holding the old one, e.g. the OTel Collector, with no warning), and a multi-instance deployment mints a different key per instance unless the properties are set explicitly and identically everywhere. Production deployment requires setting vigil.api-key/vigil.ingestion-key explicitly",
 			"Not tied to a users row, so it has no role of its own — treated as ADMIN-equivalent on every endpoint that accepts it, including ADMIN-only ones. It is an operator/service credential (used by the OTel Collector, external API clients, etc.), not a per-person credential — anyone holding it has full API access regardless of the endpoint's requiredRole",
 		],
 	},
@@ -65,6 +66,13 @@ export const AUTH_STRATEGIES =
 
 // ─── GATEWAY INFRASTRUCTURE ───────────────────────────────────────────────────
 // Security layer documentation
+//
+// Scope: this chain governs the PUBLIC port only. /internal/* routes are
+// bound to a separate, network-isolated port on the same Spring Boot
+// deployable (see AUTH_STRATEGIES.INTERNAL_ONLY and the internal.js header
+// comment) and do not pass through CorsFilter, RateLimitFilter, or
+// AuthFilter at all — isolation there is enforced at the network/port
+// level, not by this chain.
 
 export const FILTER_CHAIN =
 [
@@ -116,7 +124,7 @@ export const RATE_LIMITING_INFO =
 			"Keyed by client IP — shared bucket across all endpoints for that IP, not one bucket per route",
 			"429 Too Many Requests + Retry-After header on exhaustion",
 			"Rate check runs before auth — an exhausted IP never reaches AuthFilter",
-			"Bucket counts requests, not rows: GET ?format=csv on the telemetry endpoints returns the full unpaginated dataset in one response but still consumes exactly one token, same as a normal small page — this is what makes CSV export viable without a separate rate-limit carve-out (see TELEMETRY_ENDPOINTS in telemetry.js for the format=csv option)",
+			"Bucket counts requests, not rows: GET ?format=csv on the telemetry endpoints (metrics/traces/logs) ignores pagination and returns the full matching dataset as one unpaginated text/csv response, but still consumes exactly one token, same as a normal small page — this is what makes CSV export viable without a separate rate-limit carve-out",
 			"Known simplification: a single page load can consume several tokens at once (e.g. Overview: 3 REST GETs + 3 SSE upgrades = 6 of 10), and the bucket is shared per-IP, so multiple users behind the same NAT/proxy draw from the same 10. Acceptable for project scope; a production system would key per-user and/or size buckets per-route.",
 		],
 	},
@@ -165,7 +173,7 @@ export const ROLE_ENFORCEMENT_INFO =
 			label: "Any authenticated caller — JWT or API key, any role",
 			items:
 			[
-				"All telemetry reads · PATCH /api/users/me",
+				"All telemetry reads · GET + PATCH /api/users/me",
 				"POST /api/llm/analyze · all SSE streams",
 			],
 		},

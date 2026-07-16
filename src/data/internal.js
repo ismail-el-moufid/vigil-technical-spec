@@ -19,6 +19,15 @@
 // a genuinely separate process couldn't reach that in-memory registry
 // without a message bus, which isn't part of this design.
 
+// Silence watchdog: fire behavior. Reset (cancel + reschedule on each batch)
+// is triggered by that endpoint's own traffic, so it's documented per-endpoint
+// below same as before; the fire behavior is identical regardless of which
+// signal type last reset it, so — since nothing in EndpointComponents.jsx
+// resolves cross-references to anything other than another endpoint's id —
+// it's written out in full in each of the three ingest endpoints' criteria
+// below, the same way the reset line already was, rather than factored into
+// a module-level export that wouldn't render anywhere.
+
 export const INTERNAL_ENDPOINTS =
 [
 	{
@@ -42,23 +51,23 @@ export const INTERNAL_ENDPOINTS =
 		tables_actions: {
 			logs: "Insert",
 			alert_rules: "Read",
-			alert_history: "Insert"
+			alert_history: "Insert + Update (llm_analysis on LLM completion)"
 		},
 		constraints: {
 			criteria:
 			[
 				"Batch = the array of log entries in this single POST, all inserted together",
-				"Evaluation runs once per POST: for each enabled alert_rules row matching this batch's service, compute the rule's metric_name over its configured time window by querying already-ingested logs rows in ClickHouse (e.g. error_count = count of severity='error' rows in the window ending at this batch's latest timestamp) — the computation draws on stored history, not solely on the rows in this one request, since a small batch must still be able to trigger a window-based rule; trigger if the computed value >= threshold",
-				"Silence watchdog: cancel and reschedule per-service watchdog task on each batch",
-				"On trigger: write alert_history, broadcast alert frame via the WebSocketSession registry (see ep-alerts-ws, same deployable — see file header note), forward to /internal/llm/forward",
-				"On LLM completion: single write to alert row, rebroadcast llm frame via the same WebSocketSession registry, POST to all webhooks",
+				"Evaluation runs once per POST: for each enabled alert_rules row with signal_type = 'logs' matching this batch's service (rows with signal_type = 'metrics' or 'traces' are skipped entirely — see alert_rules.signal_type in schema.js, which is what makes it well-defined which single evaluator owns a given rule), compute the aggregate named by metric_name over the row's own window_seconds by querying already-ingested logs rows in ClickHouse, ending at this batch's latest timestamp: error_count/warning_count/critical_count = count of rows with severity = 'error'/'warning'/'critical' respectively in the window, total_count = count of all rows in the window regardless of severity (metric_name is a closed enum for signal_type = logs — see schema.js) — the computation draws on stored history, not solely on the rows in this one request, since a small batch must still be able to trigger a window-based rule; trigger if the computed value >= threshold",
+				"Silence watchdog: cancel and reschedule per-service watchdog task on each batch. One shared timer per service across logs/metrics/traces — a batch on any signal type resets it, not one independent timer per endpoint. Config: vigil.silence-timeout-seconds (Spring Boot @ConfigurationProperties, default 300) — how long a service can go without any batch before the watchdog fires. On fire: runs the exact same 'On trigger' and 'On LLM completion' steps below (write alert_history, forward the alert_id/service/triggered_at/context to FastAPI for analysis, broadcast an alert frame, then on LLM completion rebroadcast an llm frame and POST { alert_uid, title, message, state: 'alerting', link_to_upstream_details, service, metric_name, threshold, severity, triggered_at, signal_type, window_seconds, aggregation } to every registered webhook), just with fixed values in place of a matched alert_rules row: rule_id: null (no alert_rules row backs a silence alert), metric_name: 'service_silent', threshold: null, severity: 'critical' (fixed — a service going dark is always treated as top severity in this pass), signal_type: null, window_seconds: null, aggregation: null (all three are null because no single evaluator produced this alert — see schema.js alert_history.signal_type). Reschedules on the next batch for that service, so a silence alert fires at most once per silence period, not repeatedly while the service stays quiet. Scope: like the WebSocketSession registry (see 'On trigger' below), this per-service timer is in-memory and per-instance, not distributed — a batch landing on a different instance than the one currently holding that service's timer does not reset it. Single-instance deployment is the accepted target for this project; a production multi-instance deployment would need this backed by shared state (e.g. a DB row with a next-fire-time) instead of an in-process scheduled task, or every instance would run its own independent watchdog and could each fire a silence alert for the same service near-simultaneously",
+				"On trigger: write alert_history — metric_name/threshold/severity/signal_type/window_seconds/aggregation are copied from the matching alert_rules row's own values at insert time (not a live join), so this alert's historical record stays fixed even if that rule is later edited or deleted — broadcast alert frame via the in-memory WebSocketSession registry (populated by ep-alerts-ws's WS connections — this ingest endpoint and that one are the same Spring Boot deployable exposing two ports, an internal one and a public one, so both can reach the same in-process registry), forward to /internal/llm/forward",
+				"On LLM completion: single write to alert row (Update: llm_analysis only — the Insert above already wrote rule_id/service/triggered_at/metric_name/threshold/severity/signal_type/window_seconds/aggregation), rebroadcast llm frame via the same WebSocketSession registry, POST { alert_uid: alert_history.id, title: '<severity> alert: <metric_name> on <service>', message: llm_analysis, state: 'alerting', link_to_upstream_details: '<vigil.frontend-base-url>/alerts?id=<alert_history.id>', service, metric_name, threshold, severity, triggered_at, signal_type, window_seconds, aggregation } to every registered webhook — fire-and-forget by design (accepted scope decision for this project): no retry, no backoff, no dead-letter, no delivery-status surfaced anywhere in the API",
 			],
 			security: [],
 			rateLimit: "N/A",
 			realtime: "Triggers WS broadcast (alert frame) to the WebSocketSession registry on new alert",
 			fallback: "Evaluation errors silent",
 			dedup:
-				"Hash (service + severity + message + time bucket), drop if duplicate in last 10 minutes — logs have no metric_name field, so the key uses the fields the payload actually carries",
+				"Hash (service + severity + message + time bucket), drop if duplicate in last 10 minutes — logs have no metric_name field, so the key uses the fields the payload actually carries. Applied per entry within the batch: each element of the POSTed array is hashed and checked independently, so a batch can partially insert (some entries dropped as duplicates, others inserted) rather than being accepted or rejected as a whole",
 		},
 		authStrategy: ["INTERNAL_ONLY"],
 		id: "ep-ingest-logs",
@@ -84,23 +93,23 @@ export const INTERNAL_ENDPOINTS =
 		tables_actions: {
 			metrics: "Insert",
 			alert_rules: "Read",
-			alert_history: "Insert"
+			alert_history: "Insert + Update (llm_analysis on LLM completion)"
 		},
 		constraints: {
 			criteria:
 			[
 				"Batch = the array of metric points in this single POST, all inserted together",
-				"Evaluation runs once per POST: for each enabled alert_rules row matching this batch's service, match the rule's metric_name against each point's own 'name' field; if they match, trigger when that point's 'value' >= threshold. This is the one ingest endpoint where the rule's signal maps directly onto a field in the payload — no window computation over stored history is required here",
-				"Silence watchdog: cancel and reschedule per-service watchdog task on each batch",
-				"On trigger: write alert_history, broadcast alert frame via the WebSocketSession registry (see ep-alerts-ws, same deployable — see file header note), forward to /internal/llm/forward",
-				"On LLM completion: single write to alert row, rebroadcast llm frame via the same WebSocketSession registry, POST to all webhooks",
+				"Evaluation runs once per POST: for each enabled alert_rules row with signal_type = 'metrics' matching this batch's service (rows with signal_type = 'logs' or 'traces' are skipped entirely — see alert_rules.signal_type in schema.js), compute the row's aggregation over its own window_seconds by querying already-ingested metrics rows in ClickHouse — not solely the points in this one request, same as ep-ingest-logs/-traces — where name = metric_name, ending at this batch's latest timestamp: 'latest' takes the single most recent matching point's value (this is the exact equivalent of the old pre-windowing instantaneous check, so existing rule behavior remains expressible), avg/sum/min/max/count/p50/p95/p99 apply that statistic to 'value' across every matching point in the window; trigger if the computed value >= threshold. Evaluation now uses the same windowed ClickHouse-query mechanism as ep-ingest-logs and ep-ingest-traces — the only differences between the three evaluators are which ClickHouse table is queried and which metric_name/aggregation vocabulary applies for that signal_type",
+				"Silence watchdog: cancel and reschedule per-service watchdog task on each batch. One shared timer per service across logs/metrics/traces — a batch on any signal type resets it, not one independent timer per endpoint. Config: vigil.silence-timeout-seconds (Spring Boot @ConfigurationProperties, default 300) — how long a service can go without any batch before the watchdog fires. On fire: runs the exact same 'On trigger' and 'On LLM completion' steps below (write alert_history, forward the alert_id/service/triggered_at/context to FastAPI for analysis, broadcast an alert frame, then on LLM completion rebroadcast an llm frame and POST { alert_uid, title, message, state: 'alerting', link_to_upstream_details, service, metric_name, threshold, severity, triggered_at, signal_type, window_seconds, aggregation } to every registered webhook), just with fixed values in place of a matched alert_rules row: rule_id: null (no alert_rules row backs a silence alert), metric_name: 'service_silent', threshold: null, severity: 'critical' (fixed — a service going dark is always treated as top severity in this pass), signal_type: null, window_seconds: null, aggregation: null (all three are null because no single evaluator produced this alert — see schema.js alert_history.signal_type). Reschedules on the next batch for that service, so a silence alert fires at most once per silence period, not repeatedly while the service stays quiet. Scope: like the WebSocketSession registry (see 'On trigger' below), this per-service timer is in-memory and per-instance, not distributed — a batch landing on a different instance than the one currently holding that service's timer does not reset it. Single-instance deployment is the accepted target for this project; a production multi-instance deployment would need this backed by shared state (e.g. a DB row with a next-fire-time) instead of an in-process scheduled task, or every instance would run its own independent watchdog and could each fire a silence alert for the same service near-simultaneously",
+				"On trigger: write alert_history — metric_name/threshold/severity/signal_type/window_seconds/aggregation are copied from the matching alert_rules row's own values at insert time (not a live join), so this alert's historical record stays fixed even if that rule is later edited or deleted — broadcast alert frame via the in-memory WebSocketSession registry (populated by ep-alerts-ws's WS connections — this ingest endpoint and that one are the same Spring Boot deployable exposing two ports, an internal one and a public one, so both can reach the same in-process registry), forward to /internal/llm/forward",
+				"On LLM completion: single write to alert row (Update: llm_analysis only — the Insert above already wrote rule_id/service/triggered_at/metric_name/threshold/severity/signal_type/window_seconds/aggregation), rebroadcast llm frame via the same WebSocketSession registry, POST { alert_uid: alert_history.id, title: '<severity> alert: <metric_name> on <service>', message: llm_analysis, state: 'alerting', link_to_upstream_details: '<vigil.frontend-base-url>/alerts?id=<alert_history.id>', service, metric_name, threshold, severity, triggered_at, signal_type, window_seconds, aggregation } to every registered webhook — fire-and-forget by design (accepted scope decision for this project): no retry, no backoff, no dead-letter, no delivery-status surfaced anywhere in the API",
 			],
 			security: [],
 			rateLimit: "N/A",
 			realtime: "Triggers WS broadcast (alert frame) to the WebSocketSession registry on new alert",
 			fallback: "Evaluation errors silent",
 			dedup:
-				"Hash (metric_name + service + time bucket), drop if duplicate in last 10 minutes — metrics' 'name' field is used as metric_name here since it's the one payload that actually carries it",
+				"Hash (metric_name + service + time bucket), drop if duplicate in last 10 minutes — metrics' 'name' field is used as metric_name here since it's the one payload that actually carries it. Applied per point within the batch: each element of the POSTed array is hashed and checked independently, so a batch can partially insert (some points dropped as duplicates, others inserted) rather than being accepted or rejected as a whole",
 		},
 		authStrategy: ["INTERNAL_ONLY"],
 		id: "ep-ingest-metrics",
@@ -126,23 +135,23 @@ export const INTERNAL_ENDPOINTS =
 		tables_actions: {
 			traces: "Insert",
 			alert_rules: "Read",
-			alert_history: "Insert"
+			alert_history: "Insert + Update (llm_analysis on LLM completion)"
 		},
 		constraints: {
 			criteria:
 			[
 				"Batch = the array of spans in this single POST, all inserted together",
-				"Evaluation runs once per POST: for each enabled alert_rules row matching this batch's service, compute the rule's metric_name over its configured time window by querying already-ingested traces rows in ClickHouse (e.g. duration_ms percentile, or an error rate = count of status='error' spans over count of all spans in the window) — the computation draws on stored history, not solely on the spans in this one request; trigger if the computed value >= threshold",
-				"Silence watchdog: cancel and reschedule per-service watchdog task on each batch",
-				"On trigger: write alert_history, broadcast alert frame via the WebSocketSession registry (see ep-alerts-ws, same deployable — see file header note), forward to /internal/llm/forward",
-				"On LLM completion: single write to alert row, rebroadcast llm frame via the same WebSocketSession registry, POST to all webhooks",
+				"Evaluation runs once per POST: for each enabled alert_rules row with signal_type = 'traces' matching this batch's service (rows with signal_type = 'logs' or 'metrics' are skipped entirely — see alert_rules.signal_type in schema.js), compute the aggregate named by metric_name over the row's own window_seconds by querying already-ingested traces rows in ClickHouse, ending at this batch's latest timestamp: error_rate = count of status='error' spans / count of all spans in the window (a 0..1 fraction), span_count = count of all spans in the window, avg_duration_ms/p50_duration_ms/p95_duration_ms/p99_duration_ms/max_duration_ms = that statistic applied to duration_ms across all spans in the window (metric_name is a closed enum for signal_type = traces — see schema.js) — the computation draws on stored history, not solely on the spans in this one request; trigger if the computed value >= threshold",
+				"Silence watchdog: cancel and reschedule per-service watchdog task on each batch. One shared timer per service across logs/metrics/traces — a batch on any signal type resets it, not one independent timer per endpoint. Config: vigil.silence-timeout-seconds (Spring Boot @ConfigurationProperties, default 300) — how long a service can go without any batch before the watchdog fires. On fire: runs the exact same 'On trigger' and 'On LLM completion' steps below (write alert_history, forward the alert_id/service/triggered_at/context to FastAPI for analysis, broadcast an alert frame, then on LLM completion rebroadcast an llm frame and POST { alert_uid, title, message, state: 'alerting', link_to_upstream_details, service, metric_name, threshold, severity, triggered_at, signal_type, window_seconds, aggregation } to every registered webhook), just with fixed values in place of a matched alert_rules row: rule_id: null (no alert_rules row backs a silence alert), metric_name: 'service_silent', threshold: null, severity: 'critical' (fixed — a service going dark is always treated as top severity in this pass), signal_type: null, window_seconds: null, aggregation: null (all three are null because no single evaluator produced this alert — see schema.js alert_history.signal_type). Reschedules on the next batch for that service, so a silence alert fires at most once per silence period, not repeatedly while the service stays quiet. Scope: like the WebSocketSession registry (see 'On trigger' below), this per-service timer is in-memory and per-instance, not distributed — a batch landing on a different instance than the one currently holding that service's timer does not reset it. Single-instance deployment is the accepted target for this project; a production multi-instance deployment would need this backed by shared state (e.g. a DB row with a next-fire-time) instead of an in-process scheduled task, or every instance would run its own independent watchdog and could each fire a silence alert for the same service near-simultaneously",
+				"On trigger: write alert_history — metric_name/threshold/severity/signal_type/window_seconds/aggregation are copied from the matching alert_rules row's own values at insert time (not a live join), so this alert's historical record stays fixed even if that rule is later edited or deleted — broadcast alert frame via the in-memory WebSocketSession registry (populated by ep-alerts-ws's WS connections — this ingest endpoint and that one are the same Spring Boot deployable exposing two ports, an internal one and a public one, so both can reach the same in-process registry), forward to /internal/llm/forward",
+				"On LLM completion: single write to alert row (Update: llm_analysis only — the Insert above already wrote rule_id/service/triggered_at/metric_name/threshold/severity/signal_type/window_seconds/aggregation), rebroadcast llm frame via the same WebSocketSession registry, POST { alert_uid: alert_history.id, title: '<severity> alert: <metric_name> on <service>', message: llm_analysis, state: 'alerting', link_to_upstream_details: '<vigil.frontend-base-url>/alerts?id=<alert_history.id>', service, metric_name, threshold, severity, triggered_at, signal_type, window_seconds, aggregation } to every registered webhook — fire-and-forget by design (accepted scope decision for this project): no retry, no backoff, no dead-letter, no delivery-status surfaced anywhere in the API",
 			],
 			security: [],
 			rateLimit: "N/A",
 			realtime: "Triggers WS broadcast (alert frame) to the WebSocketSession registry on new alert",
 			fallback: "Evaluation errors silent",
 			dedup:
-				"Hash (service + name + status + time bucket), drop if duplicate in last 10 minutes — traces have no metric_name field, so the key uses the fields the payload actually carries",
+				"Hash (service + name + status + time bucket), drop if duplicate in last 10 minutes — traces have no metric_name field, so the key uses the fields the payload actually carries. Applied per span within the batch: each element of the POSTed array is hashed and checked independently, so a batch can partially insert (some spans dropped as duplicates, others inserted) rather than being accepted or rejected as a whole",
 		},
 		authStrategy: ["INTERNAL_ONLY"],
 		id: "ep-ingest-traces",
@@ -175,7 +184,7 @@ export const INTERNAL_ENDPOINTS =
 			security: [],
 			rateLimit: "N/A",
 			realtime:
-				"Streams token frames back to Spring Boot caller. Spring Boot writes final analysis to alert row and rebroadcasts an llm frame via the WebSocketSession registry (see ep-alerts-ws).",
+				"Streams token frames back to Spring Boot caller. Spring Boot writes final analysis to alert row and rebroadcasts an llm frame via the in-memory WebSocketSession registry — the same registry /api/alerts/ws connections are held in, since this internal endpoint and the public API are the same Spring Boot deployable exposing two ports, not separate microservices.",
 			fallback:
 				"30s timeout. Spring Boot writes 'Analysis unavailable' to alert row, rebroadcasts, proceeds to webhooks.",
 			dedup: "None",

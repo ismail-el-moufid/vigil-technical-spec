@@ -73,6 +73,7 @@ export const USERS_ENDPOINTS =
 			criteria: [
 				"User Management Major (2pt)",
 				"409 returned if email collides with the existing unique constraint on users.email — checked before insert, not left as an unhandled DB constraint violation",
+				"400 returned if role is present but not one of admin | viewer — same validation pattern as severity on the alert rules endpoints",
 			],
 			security: [],
 			rateLimit: "10 req/min",
@@ -83,6 +84,37 @@ export const USERS_ENDPOINTS =
 		authStrategy: ["JWT", "API_KEY"],
 		requiredRole: "ADMIN",
 		id: "ep-users-create",
+	},
+	{
+		route: "/api/users/me",
+		service: "Spring Boot + PostgreSQL",
+		owner: "Backend Lead",
+		method: "GET",
+		request: { query: [], body: null },
+		response:
+		{
+			200: "{ id: '<uuid>', email: '<email>', role: admin | viewer }",
+			401: "{ error: 'unauthorized' }",
+			429: "{ error: 'rate limited' }",
+			500: "{ error: 'server error' }",
+		},
+		group: "Users",
+		tables: ["users"],
+		tables_actions: { users: "Read" },
+		constraints: {
+			criteria: [
+				"Identity resolved from the SecurityContext principal (JWT) — no path param, always the caller's own row",
+				"Closes the gap left by login/setup only returning { role, access_token }: this is the documented way the frontend gets its own id/email (e.g. to pre-fill the change-email form behind PATCH /api/users/me), rather than decoding the opaque access token client-side",
+			],
+			security: [],
+			rateLimit: "10 req/min",
+			realtime: "None",
+			fallback: "None",
+			dedup: "None",
+		},
+		authStrategy: ["JWT", "API_KEY"],
+		requiredRole: "ADMIN_/_VIEWER",
+		id: "ep-users-me-get",
 	},
 	{
 		route: "/api/users/me",
@@ -158,6 +190,7 @@ export const USERS_ENDPOINTS =
 			[
 				"If role: viewer is requested and the target is currently the only user with role: admin, request is rejected with 409 — same guard as ep-users-delete, since demotion is functionally equivalent to removal",
 				"If email is requested and collides with another user's users.email unique constraint, request is rejected with 409 — both 409 causes share the status code but carry distinct 'code' values (LAST_ADMIN vs EMAIL_TAKEN); clients should branch on 'code', not the 'error' message text",
+				"400 returned if role is present but not one of admin | viewer — same validation pattern as severity on the alert rules endpoints, checked before the 409 last-admin guard",
 			],
 			security: [],
 			rateLimit: "10 req/min",
@@ -198,7 +231,7 @@ export const USERS_ENDPOINTS =
 			[
 				"If the target is currently the only user with role: admin, request is rejected with 409 — prevents the deployment from ending up with zero admins",
 				"sessions.user_id and refresh_tokens.user_id are declared ON DELETE CASCADE — deleting a user removes all of their sessions and refresh_tokens rows in the same transaction as the users delete, so the 204 path never hits a dangling FK constraint",
-				"alert_acks.user_id (see SCHEMA.alert_acks) is also ON DELETE CASCADE — a deleted user's alert acknowledgment history is removed with them; this is an explicit, accepted product decision (not silent data loss) since re-showing acks for a deleted account has no meaningful owner to display",
+				"alert_acks.user_id is also ON DELETE CASCADE — a deleted user's alert acknowledgment history is removed with them; this is an explicit, accepted product decision (not silent data loss) since re-showing acks for a deleted account has no meaningful owner to display",
 			],
 			security: [],
 			rateLimit: "10 req/min",

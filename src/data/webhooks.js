@@ -1,3 +1,17 @@
+// Delivery payload shape: previously undocumented — see ep-webhooks-create's
+// criteria below for the actual spec, inlined there (not factored into a
+// module-level export) since EndpointComponents.jsx only ever renders an
+// endpoint's own fields; nothing resolves a bare export name back to a card.
+//
+// Shape matches Grafana OnCall's "Formatted Webhook" inbound integration
+// (POST .../integrations/v1/formatted_webhook/<id>/) field-for-field, so a
+// webhooks.url pointed at an OnCall Formatted Webhook integration URL works
+// with zero translation layer. As of March 2026 Grafana OnCall OSS is
+// archived (grafana/oncall is read-only; active development moved to
+// Grafana Cloud IRM), but the OSS integration endpoint and this payload
+// shape remain usable for self-hosted OnCall, which is what this
+// compatibility targets.
+
 export const WEBHOOKS_ENDPOINTS =
 [
 	{
@@ -63,13 +77,17 @@ export const WEBHOOKS_ENDPOINTS =
 			criteria: [
 				"400 if url isn't a well-formed https:// URL",
 				"409 if url collides with the existing unique constraint on webhooks.url — checked before insert, not left as an unhandled DB constraint violation",
+				"Delivery payload POSTed to url on alert (previously unspecified): { alert_uid: '<alert_history.id>', title: '<severity> alert: <metric_name> on <service>', message: '<llm_analysis>', state: 'alerting', link_to_upstream_details: '<vigil.frontend-base-url>/alerts?id=<alert_history.id>', service, metric_name, threshold: number | null, severity: info | warning | critical, triggered_at, signal_type: logs | metrics | traces | null, window_seconds: number | null, aggregation: string | null }. First five fields match Grafana OnCall's Formatted Webhook inbound integration field-for-field — a url pointed at an OnCall Formatted Webhook URL needs no translation layer (OnCall OSS has been archived since March 2026, grafana/oncall is read-only with development continuing in Grafana Cloud IRM, but the OSS integration endpoint and this payload shape remain usable for self-hosted OnCall). The rest are Vigil-native, appended for receivers that aren't OnCall — signal_type/window_seconds/aggregation are null for silence-watchdog alerts, same reasoning as everywhere else these columns appear",
+				"Fires once, after LLM completion — or after FastAPI's 30-second analysis timeout, at which point Spring Boot writes 'Analysis unavailable' as llm_analysis and proceeds to webhooks anyway — not at initial trigger, since llm_analysis is the payload's message body",
+				"state is always 'alerting', never 'ok': Vigil alerts are closed by a person acknowledging or resolving them (PUT /api/alerts/{id} with { status: acknowledged | resolved }, or the equivalent WS ack frame), not by any automatic condition clearing, so there is no resolve event this pipeline could ever send",
+				"link_to_upstream_details requires a new Spring Boot @ConfigurationProperties value, vigil.frontend-base-url (operator-provided, e.g. the deployed frontend's origin) — nothing else in the spec previously required the backend to know its own frontend's URL",
 			],
 			security: [
 				"ADMIN-gated, which bounds who can register a target; server additionally resolves the hostname at registration time and rejects (400) targets resolving to private/loopback/link-local ranges or the cloud metadata address (169.254.169.254) — this narrows but does not eliminate SSRF risk (DNS can still change post-registration), which remains an accepted residual scope limitation for this project",
 			],
 			rateLimit: "10 req/min",
 			realtime: "None",
-			fallback: "Delivery failures are silent",
+			fallback: "Delivery failures are silent — no retry, no backoff, no dead-letter, no delivery-status surfaced anywhere in the API. Accepted scope decision for this project: webhook delivery is fire-and-forget by design, same treatment as the SSRF residual-risk note above. A production system would want at minimum a retry-with-backoff policy and a visible delivery-failure indicator per webhooks row.",
 			dedup: "None",
 		},
 		authStrategy: ["JWT", "API_KEY"],

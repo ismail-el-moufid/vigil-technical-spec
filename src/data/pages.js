@@ -125,7 +125,7 @@ export const PAGES =
 	{
 		name: "Settings",
 		path: "/settings",
-		desc: "User CRUD, role management, webhook management, and read-only display of the startup-generated API key and ingestion key (sourced from Spring Boot @ConfigurationProperties — see GET /api/config/keys). Config export is client-side: fetches alert rules and webhooks via existing GETs and downloads as JSON. Import iterates existing POST endpoints with the imported payload. Session management section lists all active sessions for the current user (device, IP, last active) with per-session revoke; the calling session is flagged as current.",
+		desc: "User CRUD, role management, webhook management, and read-only display of the startup-generated API key and ingestion key (sourced from Spring Boot @ConfigurationProperties, listed in Endpoints used below). Config export is client-side: fetches alert rules and webhooks via existing GETs and downloads as JSON. Import iterates existing POST endpoints with the imported payload. Session management section lists all active sessions for the current user (device, IP, last active) with per-session revoke; the calling session is flagged as current.",
 		role: "Frontend Lead + Backend Lead",
 		group: "Settings",
 		endpointIds:
