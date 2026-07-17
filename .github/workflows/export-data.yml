@@ -1,7 +1,7 @@
 name: Export spec data as JSON
 
 # Manually trigger from the Actions tab, or it fires automatically whenever
-# src/data/**.js changes on main. Either way it converts src/data's exports
+# data files change on main. Either way it converts src/data's exports
 # to JSON and publishes a GitHub Release with the JSON files attached, so you
 # always have a stable download link to hand to an AI tool.
 
@@ -11,6 +11,7 @@ on:
     branches: [master]
     paths:
       - "src/data/**"
+      - ".github/workflows/export-data.yml"
 
 permissions:
   contents: write
