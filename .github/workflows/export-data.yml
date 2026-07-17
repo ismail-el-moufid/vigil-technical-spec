@@ -12,6 +12,7 @@ on:
     paths:
       - "src/data/**"
       - ".github/workflows/export-data.yml"
+      - "scripts/export-json.mjs"
 
 permissions:
   contents: write
