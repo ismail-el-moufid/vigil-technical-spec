@@ -32,18 +32,14 @@ jobs:
       - name: Export data as JSON
         run: node scripts/export-json.mjs dist/json
 
-      - name: Generate release tag
-        id: tag
-        run: echo "tag=data-$(date +%Y%m%d-%H%M%S)" >> "$GITHUB_OUTPUT"
-
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.tag.outputs.tag }}
-          name: "Spec data — ${{ steps.tag.outputs.tag }}"
+          tag_name: spec-as-json
+          name: "spec as json"
           files: dist/json/*.json
           body: |
             Auto-generated JSON export of `src/data`'s exports (one file per
-            export, plus `all.json` with everything combined) as of this
-            commit. Download the attached JSON files below and hand them
-            straight to an AI tool.
+            export, plus `all.json` with everything combined) from the latest
+            run. Download the attached JSON files below and hand them straight
+            to an AI tool.
