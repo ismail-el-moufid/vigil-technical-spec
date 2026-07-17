@@ -20,10 +20,13 @@ export const CONFIG_ENDPOINTS =
 		constraints: {
 			criteria:
 			[
-				"Keys sourced from Spring Boot @ConfigurationProperties bean (vigil.api-key, vigil.ingestion-key)",
-				"Auto-generated as UUID via @PostConstruct at startup if properties are absent, held in memory only — same generation mechanism documented on AUTH_STRATEGIES.API_KEY, restated here in full since this page is the natural place an operator looks for 'how do I get my API key', not just the auth-strategy reference",
-				"Accepted dev-mode default, not a production design: a restart silently rotates the key if vigil.api-key/vigil.ingestion-key are left unset (breaking any external caller holding the old value, e.g. the OTel Collector, with no warning), and a multi-instance deployment mints a different key per instance unless the properties are set explicitly and identically everywhere. Production deployment requires setting vigil.api-key/vigil.ingestion-key explicitly",
+				{
+					text: "This endpoint is the current source of truth for both keys' live values. For how they come to exist in the first place",
+					refs: [{ id: "gw-strat-api-key", field: "items[1]" }],
+				},
 				"Keys are read-only",
+				"api_key and ingestion_key have distinct consumers, which is why they're separate values rather than one key reused: api_key is the general-purpose credential for the public API's JWT_/_API_KEY endpoints. ingestion_key has nothing to do with ClickHouse — the collector's write to ClickHouse uses ClickHouse's own credentials, a separate secret this project doesn't specify. ingestion_key is instead the shared secret the collector's own receiver checks incoming telemetry against when a monitored service pushes logs/metrics/traces to it, rejecting anything that doesn't present it — that check happens entirely inside the collector, upstream of both ClickHouse and this API, and is unrelated to the network-isolated internal ingest port (which enforces via INTERNAL_ONLY network isolation, not a key at all)",
+				"ingestion_key reaches the collector programmatically, not through an operator: on generation, Spring Boot writes the value to a file on a volume shared with the collector process, rather than holding it in memory only like vigil.api-key does. The collector's own bearertokenauth extension is configured with filename pointed at that same file and applied as the auth.authenticator on its receiver, so it validates every incoming service push against the file's current contents — a key rotated on restart reaches the collector automatically, with no copy-paste step. In a multi-instance Spring Boot deployment, either only one instance should own writing that file, or vigil.ingestion-key should be set explicitly and identically across instances, to avoid a race on first boot leaving the file holding a value not every instance agrees on",
 			],
 			security: [],
 			rateLimit: "10 req/min",

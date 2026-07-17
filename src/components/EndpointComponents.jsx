@@ -6,6 +6,7 @@ import TablesRow from "./TablesRow.jsx";
 import useMaskSpotlight from "../hooks/useMaskSpotlight.js";
 import { useCollapseHotkey } from "../hooks/useCollapseHotkey";
 import CollapseToggle from "./ui/CollapseToggle.jsx";
+import RefText from "./ui/RefText.jsx";
 
 const CONSTRAINT_CONFIG =
 [
@@ -226,7 +227,7 @@ function AccessRow({ ep, openKey, isOpenState, toggleOpenState })
 									{s.items.map((item, i) => (
 										<div className="gw-row-item" key={i}>
 											<span className="gw-row-dot">·</span>
-											<span className="constraint-text">{item}</span>
+											<span className="constraint-text"><RefText value={item} /></span>
 										</div>
 									))}
 								</div>
@@ -370,7 +371,7 @@ function ConstraintSection({
 							<span className={"constraint-tag constraint-tag--" + r.type}>
 								{r.tag}
 							</span>
-							<span className="constraint-text">{r.text}</span>
+							<span className="constraint-text"><RefText value={r.text} /></span>
 						</div>
 					))}
 				</div>
@@ -526,7 +527,7 @@ function QueryParamsSection({ params, label = "Query Params" })
 						<span className="query-param-name">
 							{p.required ? p.name : "?" + p.name}
 						</span>
-						<span className="query-param-type">{p.type}</span>
+						<span className="query-param-type"><RefText value={p.type} /></span>
 					</span>
 				))}
 			</div>

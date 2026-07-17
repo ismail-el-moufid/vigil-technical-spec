@@ -126,9 +126,27 @@ export const ALERT_ENDPOINTS =
 		constraints: {
 			criteria: [
 				"count defaults to 20 when omitted; hasMore derived server-side: returned.length === count",
-				"400 returned if count is present but non-numeric or outside 1-100 (same bound as ep-alerts-list), or offset is present but non-numeric or negative",
-				"Read grant is ADMIN_/_VIEWER while create/update/delete on this same table are ADMIN-only (ep-alert-rules-create/-update/-delete) — confirmed intentional, not over-scoped: viewers need to see configured thresholds/severities on the Alerts page even though only admins may change them, same reasoning as ep-telemetry-attributes' ADMIN_/_VIEWER grant",
-				"Uses offset pagination, not the keyset/before pagination used on ep-telemetry-metrics/-traces/-logs and ep-alerts-list — an accepted difference, not an oversight: alert_rules rows are created rarely (operator-configured thresholds) compared to continuously-inserted telemetry/alert rows, so the row-skip/duplicate drift keyset pagination exists to avoid is a negligible risk here",
+				{
+					text: "400 returned if count is present but non-numeric or outside 1-100 (same bound as the alerts list endpoint), or offset is present but non-numeric or negative",
+					refs: ["ep-alerts-list"],
+				},
+				{
+					text: "Read grant is ADMIN_/_VIEWER while create/update/delete on this same table are ADMIN-only — confirmed intentional, not over-scoped: viewers need to see configured thresholds/severities on the Alerts page even though only admins may change them",
+					refs: [
+					   "ep-alert-rules-create",
+					   "ep-alert-rules-update",
+					   "ep-alert-rules-delete"
+					],
+				},
+				{
+					text: "Uses offset pagination, not the keyset/before pagination used on the telemetry endpoints and the alerts list — an accepted difference, not an oversight: alert_rules rows are created rarely (operator-configured thresholds) compared to continuously-inserted telemetry/alert rows, so the row-skip/duplicate drift keyset pagination exists to avoid is a negligible risk here",
+					refs: [
+					   "ep-telemetry-metrics",
+					   "ep-telemetry-traces",
+					   "ep-telemetry-logs",
+					   "ep-alerts-list"
+					],
+				},
 			],
 			security: [
 				"Any authenticated user may view any alert rule — no per-service ownership scoping"
@@ -154,8 +172,18 @@ export const ALERT_ENDPOINTS =
 			[
 				{ name: "service",  type: "string",  required: true },
 				{ name: "signal_type", type: "logs | metrics | traces", required: true },
-				{ name: "metric_name", type: "string — enum depends on signal_type: for logs, one of error_count | warning_count | critical_count | total_count; for traces, one of error_rate | span_count | avg_duration_ms | p50_duration_ms | p95_duration_ms | p99_duration_ms | max_duration_ms; for metrics, open vocabulary checked against ep-telemetry-attributes' known key list", required: true },
-				{ name: "aggregation", type: "latest | avg | sum | min | max | count | p50 | p95 | p99 — required when signal_type = metrics, must be omitted when signal_type = logs | traces", required: false },
+				{
+				   name: "metric_name",
+				   type: {
+				      text: "string — enum depends on signal_type: for logs, one of error_count | warning_count | critical_count | total_count; for traces, one of error_rate | span_count | avg_duration_ms | p50_duration_ms | p95_duration_ms | p99_duration_ms | max_duration_ms; for metrics, open vocabulary checked against the known attribute key list"
+				   },
+				   required: true
+				},
+				{
+				   name: "aggregation",
+				   type: "latest | avg | sum | min | max | count | p50 | p95 | p99 — required when signal_type = metrics, must be omitted when signal_type = logs | traces",
+				   required: false
+				},
 				{ name: "window_seconds", type: "integer, minimum 10", required: true },
 				{ name: "threshold",type: "number",  required: true },
 				{ name: "severity", type: "info | warning | critical",  required: true },
@@ -178,15 +206,18 @@ export const ALERT_ENDPOINTS =
 			criteria:
 			[
 				"is_default is never client-settable; always false on rules created via this endpoint",
-				"Rule triggers when the row's aggregate — computed per signal_type/metric_name/aggregation/window_seconds — is >= threshold at evaluation time — fixed direction, no comparison-operator choice. All three signal types (ep-ingest-logs/-metrics/-traces) now evaluate rules the same windowed-query way; the only difference between them is which ClickHouse table is queried and which metric_name/aggregation vocabulary applies",
+				"Rule triggers when the row's aggregate — computed per signal_type/metric_name/aggregation/window_seconds — is >= threshold at evaluation time — fixed direction, no comparison-operator choice. All three signal types now evaluate rules the same windowed-query way; the only difference between them is which ClickHouse table is queried and which metric_name/aggregation vocabulary applies",
 				"400 returned if signal_type is present but not one of logs | metrics | traces",
-				"400 returned if metric_name doesn't match the enum for the submitted signal_type: for logs, one of error_count | warning_count | critical_count | total_count; for traces, one of error_rate | span_count | avg_duration_ms | p50_duration_ms | p95_duration_ms | p99_duration_ms | max_duration_ms; for metrics, checked against ep-telemetry-attributes' known key list rather than a fixed enum, since metric names there are open-ended and OTel-exporter-defined",
+				"400 returned if metric_name doesn't match the enum for the submitted signal_type: for logs, one of error_count | warning_count | critical_count | total_count; for traces, one of error_rate | span_count | avg_duration_ms | p50_duration_ms | p95_duration_ms | p99_duration_ms | max_duration_ms; for metrics, checked against the known attribute key list rather than a fixed enum, since metric names there are open-ended and OTel-exporter-defined",
 				"400 returned if aggregation is missing or not one of latest | avg | sum | min | max | count | p50 | p95 | p99 when signal_type = metrics, or if aggregation is present at all when signal_type = logs | traces (aggregation is already encoded in metric_name's enum for those two signal types)",
 				"400 returned if window_seconds is missing, non-numeric, non-integer, or less than 10",
 				"Frontend may pre-fill this form from an existing rule's values (clone) — purely a frontend UX detail, no API shape change",
 				"400 returned if severity is present but not one of info | warning | critical — same validation pattern as role on the users endpoints",
 				"403 is returned when an authenticated caller lacks the ADMIN role — this endpoint's requiredRole is ADMIN, shown on the Role pill above",
-				"No dedup key: alert_rules carries no uniqueness constraint, and this endpoint does not check for an existing rule with matching service/signal_type/metric_name/aggregation before insert — a retried or double-submitted POST creates a second, functionally-identical row rather than erroring or upserting. Accepted scope decision for this project: unlike ep-users-create/ep-webhooks-create (DB-unique-constraint-backed 409) or the ingest endpoints (explicit hash-based dedup window), duplicate rule creation here is treated as user/client error, not guarded against server-side. An admin who creates a duplicate rule can remove it via ep-alert-rules-delete same as any other non-default rule",
+				{
+					text: "No dedup key: alert_rules carries no uniqueness constraint, and this endpoint does not check for an existing rule with matching service/signal_type/metric_name/aggregation before insert — a retried or double-submitted POST creates a second, functionally-identical row rather than erroring or upserting. Accepted scope decision for this project: unlike the users/webhooks create endpoints (DB-unique-constraint-backed 409) or the ingest endpoints (explicit hash-based dedup window), duplicate rule creation here is treated as user/client error, not guarded against server-side. An admin who creates a duplicate rule can remove it same as any other non-default rule",
+					refs: ["ep-users-create", "ep-webhooks-create", "ep-alert-rules-delete"],
+				},
 			],
 			security: [
 				"Caller must hold ADMIN role (this endpoint's requiredRole, shown on the Role pill above); among admins there is no per-service ownership scoping — any admin may create a rule for any service"
@@ -212,8 +243,19 @@ export const ALERT_ENDPOINTS =
 			[
 				{ name: "enabled",  type: "boolean", required: false },
 				{ name: "service",  type: "string",  required: false },
-				{ name: "metric_name", type: "string — metric_name itself is editable; its valid values are constrained by the target row's signal_type, which is immutable (see criteria below) — same validation as ep-alert-rules-create", required: false },
-				{ name: "aggregation", type: "latest | avg | sum | min | max | count | p50 | p95 | p99 — only settable if the target row's signal_type = metrics", required: false },
+				{
+				   name: "metric_name",
+				   type: {
+				      text: "string — metric_name itself is editable; its valid values are constrained by the target row's signal_type, which is immutable (see criteria below) — same validation as on create",
+				      refs: ["ep-alert-rules-create"]
+				   },
+				   required: false
+				},
+				{
+				   name: "aggregation",
+				   type: "latest | avg | sum | min | max | count | p50 | p95 | p99 — only settable if the target row's signal_type = metrics",
+				   required: false
+				},
 				{ name: "window_seconds", type: "integer, minimum 10", required: false },
 				{ name: "threshold",type: "number",  required: false },
 				{ name: "severity", type: "info | warning | critical",  required: false },
@@ -235,9 +277,15 @@ export const ALERT_ENDPOINTS =
 		constraints: {
 			criteria: [
 				"If is_default: true on the target row, only 'enabled' may be changed — any other field in the request body returns 403 (this already covers window_seconds/aggregation, both fall under 'any other field')",
-				"signal_type is immutable after creation, default rule or not — 400 returned if it's present in the request body at all, rather than silently ignoring it as an unrecognized field. A client that wants to change which evaluator owns a rule must delete and recreate it (subject to the is_default delete restriction on ep-alert-rules-delete)",
+				{
+					text: "signal_type is immutable after creation, default rule or not — 400 returned if it's present in the request body at all, rather than silently ignoring it as an unrecognized field. A client that wants to change which evaluator owns a rule must delete and recreate it (subject to the is_default delete restriction)",
+					refs: ["ep-alert-rules-delete"],
+				},
 				"400 returned if severity is present but not one of info | warning | critical",
-				"400 returned if metric_name is present but doesn't match the enum for the target row's (unchangeable) signal_type — same enums as ep-alert-rules-create",
+				{
+					text: "400 returned if metric_name is present but doesn't match the enum for the target row's (unchangeable) signal_type — same enums as on create",
+					refs: ["ep-alert-rules-create"],
+				},
 				"400 returned if aggregation is present and the target row's signal_type is logs | traces (aggregation is only settable on metrics rules), or if aggregation is present but not one of the fixed enum when signal_type = metrics",
 				"400 returned if window_seconds is present but non-numeric, non-integer, or less than 10",
 				"Both 403 causes share the status code but carry distinct 'code' values (ADMIN_REQUIRED vs DEFAULT_RULE_PROTECTED) — clients should branch on 'code', not on the 'error' message text",
@@ -281,7 +329,7 @@ export const ALERT_ENDPOINTS =
 			criteria: [
 				"If is_default: true on the target row, request is rejected with 403 — default rules cannot be deleted, only disabled via PATCH { enabled: false }",
 				"Both 403 causes share the status code but carry distinct 'code' values (ADMIN_REQUIRED vs DEFAULT_RULE_PROTECTED) — clients should branch on 'code', not on the 'error' message text",
-				"Deleting a non-default rule cascades into alert_history: every row whose rule_id referenced this rule has rule_id set to NULL (schema-level ON DELETE SET NULL). Those rows' snapshotted metric_name/threshold/severity/etc. are untouched — only rule_id changes. This produces the same null-rule_id shape as a silence-watchdog alert; see schema.js's alert_history.rule_id note for how consumers distinguish the two",
+				"Deleting a non-default rule cascades into alert_history: every row whose rule_id referenced this rule has rule_id set to NULL (schema-level ON DELETE SET NULL). Those rows' snapshotted metric_name/threshold/severity/etc. are untouched — only rule_id changes. This produces the same null-rule_id shape as a silence-watchdog alert; consumers distinguish the two by metric_name, not rule_id — metric_name === 'service_silent' is the silence-watchdog case, any other metric_name with rule_id === null is this deleted-rule case",
 				"400 returned if the {id} path segment isn't a syntactically valid UUID — malformed path params are rejected the same way as malformed query params or body fields elsewhere in this spec, not left to fall through to an unhandled 500 or a misleading 404",
 			],
 			security: [

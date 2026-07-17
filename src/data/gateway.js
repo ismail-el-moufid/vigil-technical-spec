@@ -24,7 +24,10 @@ export const AUTH_STRATEGIES =
 			"AuthFilter validates signature and expiry only, then sets the SecurityContext principal — no DB hit on every request",
 			"On expiry the next API call returns 401; frontend calls /api/auth/refresh which validates the refresh_token cookie against the refresh_tokens table, rotates the row, and reissues a new access token and refresh cookie",
 			"Claims in a live access token are explicitly designed to lag DB state until the next refresh — the tradeoff for no DB hit on every request. Scope of the re-check: 'admin endpoints' means every endpoint whose requiredRole is ADMIN, GET included, not writes only — a demoted admin's still-live token gets a 403 on their very next call to any ADMIN-tier route (e.g. GET /api/config/keys, GET /api/users), it just isn't caught until that next request happens, per the claims-lag tradeoff above. ADMIN_/_VIEWER-tier reads are not re-checked beyond signature/expiry, since any authenticated role already satisfies them",
-			"The same claims-lag tradeoff applies to account deletion (ep-users-delete), not just demotion: deleting a user cascades their sessions/refresh_tokens rows immediately (their next /api/auth/refresh fails), but does not and cannot revoke an access token already issued to them, since AuthFilter never hits the DB per request. A just-deleted user (including a self-deleted admin) can keep making authenticated calls on that still-valid token, indistinguishable from any other valid JWT, until it naturally expires — up to the full 15-minute TTL. Accepted as the same tradeoff already made for demotion above, not a separate gap",
+			{
+				text: "The same claims-lag tradeoff applies to account deletion, not just demotion: deleting a user cascades their sessions/refresh_tokens rows immediately (their next /api/auth/refresh fails), but does not and cannot revoke an access token already issued to them, since AuthFilter never hits the DB per request. A just-deleted user (including a self-deleted admin) can keep making authenticated calls on that still-valid token, indistinguishable from any other valid JWT, until it naturally expires — up to the full 15-minute TTL. Accepted as the same tradeoff already made for demotion above, not a separate gap",
+				refs: ["ep-users-delete"],
+			},
 			"Signing key: HMAC secret sourced from a Spring Boot @ConfigurationProperties bean (vigil.jwt-secret) — auto-generated as a random secret at startup via @PostConstruct and held in memory only if the property is left unset. This in-memory default is a dev-mode convenience, not the production design: a restart or a multi-instance deployment where vigil.jwt-secret isn't set identically everywhere invalidates every outstanding access token silently (the instance that issued it and the instance validating it disagree on the secret). Accepted for this project's scope; production deployment requires vigil.jwt-secret to be set explicitly and identically across instances",
 		],
 	},
@@ -36,8 +39,9 @@ export const AUTH_STRATEGIES =
 		items:
 		[
 			"Program-level lifetime",
-			"Sourced from a Spring Boot @ConfigurationProperties bean (vigil.api-key, vigil.ingestion-key); auto-generated as a UUID via @PostConstruct at startup and held in memory only if the property is left unset. Accepted dev-mode default for this project's scope, not a production design: a restart silently rotates the key (breaking any external caller holding the old one, e.g. the OTel Collector, with no warning), and a multi-instance deployment mints a different key per instance unless the properties are set explicitly and identically everywhere. Production deployment requires setting vigil.api-key/vigil.ingestion-key explicitly",
-			"Not tied to a users row, so it has no role of its own — treated as ADMIN-equivalent on every endpoint that accepts it, including ADMIN-only ones. It is an operator/service credential (used by the OTel Collector, external API clients, etc.), not a per-person credential — anyone holding it has full API access regardless of the endpoint's requiredRole",
+			"vigil.api-key: sourced from the same @ConfigurationProperties bean, auto-generated as a UUID via @PostConstruct at startup and held in memory only if left unset. Accepted dev-mode default, not a production design: a restart silently rotates it, breaking any external API client holding the old value with no warning, and a multi-instance deployment mints a different key per instance unless the property is set explicitly and identically everywhere. Production deployment requires setting vigil.api-key explicitly",
+			"vigil.ingestion-key: generated the same way, but also written to a file on a volume shared with the OTel Collector process rather than kept in memory only. The collector's own bearertokenauth extension reads that file directly (filename config, applied as the auth.authenticator on its receiver) to validate incoming service pushes, so a rotated value reaches the collector automatically — it doesn't have the restart-breaks-external-caller risk vigil.api-key has",
+			"Not tied to a users row, so it has no role of its own — treated as ADMIN-equivalent on every endpoint that accepts it, including ADMIN-only ones. It is an operator/service credential (used by external API clients, etc.), not a per-person credential — anyone holding it has full API access regardless of the endpoint's requiredRole",
 		],
 	},
 	INTERNAL_ONLY: {
@@ -58,7 +62,10 @@ export const AUTH_STRATEGIES =
 		label: "WebSocket, JWT validated at handshake via HandshakeInterceptor",
 		items:
 		[
-			"Resolves role/identity identically to AUTH_STRATEGIES.JWT, off the same signed claims — this is a JWT validated at a different point in the request lifecycle (HTTP Upgrade instead of every request's AuthFilter), not a distinct credential type or a fixed/implicit role",
+			{
+				text: "Resolves role/identity identically, off the same signed claims — this is a JWT validated at a different point in the request lifecycle (HTTP Upgrade instead of every request's AuthFilter), not a distinct credential type or a fixed/implicit role",
+				refs: ["gw-strat-jwt"],
+			},
 			"Token passed as ?token= on the upgrade request — same tradeoff as SSE (native WebSocket clients can't set an Authorization header either); accepted for this project",
 			"Connection rejected during the HTTP Upgrade if the token is invalid or missing — an unauthenticated client never completes the handshake, so there's no post-connect auth window or frame protocol",
 			"On token expiry, client reconnects with a fresh token; no mid-session re-auth frames",
@@ -67,13 +74,60 @@ export const AUTH_STRATEGIES =
 };
 
 // ─── GATEWAY INFRASTRUCTURE ───────────────────────────────────────────────────
-// Security layer documentation
+// Infra layer documentation (startup sequence + gateway filter chain) —
+// rendered by the INFRA card, not a security-specific section.
 //
 // Scope: this chain governs the PUBLIC port only. /internal/* routes are
 // bound to a separate, network-isolated port on the same Spring Boot
-// deployable (see AUTH_STRATEGIES.INTERNAL_ONLY) and do not pass through
+// deployable and do not pass through
 // CorsFilter, RateLimitFilter, or AuthFilter at all — isolation there is
 // enforced at the network/port level, not by this chain.
+
+// ─── STARTUP SEQUENCE ─────────────────────────────────────────────────────
+// Boot-time order, runs once when the Spring Boot process starts — not
+// triggered by any request, so this belongs here (infrastructure-wide)
+// rather than folded into any single endpoint's fields. vigil.api-key must
+// be generated before the filter chain assembles: AuthFilter checks
+// incoming ApiKey headers against it from the moment the public port is
+// reachable, so generating it first closes what would otherwise be a
+// startup window where the port is open but AuthFilter has no value to
+// check requests against. vigil.ingestion-key's own ordering concern is
+// different and doesn't involve this process's ports at all — it's checked
+// by the collector, an external process this API doesn't control the
+// startup of, against services pushing it telemetry; the value reaches the
+// collector by being written to a file on a volume mounted into both
+// processes, which the collector's own bearertokenauth extension reads
+// directly — not a manual hand-off, and not something this sequence
+// enforces itself since it happens outside this process's ports. It still
+// needs to exist before that file can be written, which is why key
+// generation for both is grouped into one step below rather than split.
+// vigil.jwt-secret (the same HMAC secret the JWT strategy signs access
+// tokens with) is generated by the same
+// @PostConstruct mechanism but isn't pictured below: JWT validation only
+// applies to an already-logged-in caller, so it isn't a startup-ordering
+// concern the way vigil.api-key is — nothing reachable at boot depends on
+// it yet.
+export const STARTUP_SEQUENCE =
+[
+	{
+		tag: "KEYS",
+		tagType: "rate",
+		label: "Generate vigil.api-key + vigil.ingestion-key",
+		sub: "Whichever key is unset on the config bean gets generated via UUID.randomUUID(). vigil.api-key stays in memory only; vigil.ingestion-key is also written to a shared file for the collector to read. Live values are fetched via a GET request.",
+	},
+	{
+		tag: "CHAIN",
+		tagType: "dedup",
+		label: "Assemble filter chain",
+		sub: "CorsFilter, RateLimitFilter (Bucket4j), and AuthFilter are wired in — AuthFilter checks incoming ApiKey headers against vigil.api-key, so it can only exist once that key is generated.",
+	},
+	{
+		tag: "LISTEN",
+		tagType: "crit",
+		label: "Open public + internal ports",
+		sub: "Public port opens after CHAIN, so AuthFilter is already enforcing vigil.api-key from the first request. Internal port opens at the same time, gated by network isolation rather than a key. vigil.ingestion-key's shared file is already written by this point, so the collector's own auth extension can start validating service pushes as soon as it comes up.",
+	},
+];
 
 export const FILTER_CHAIN =
 [
@@ -154,7 +208,10 @@ export const RATE_LIMITING_INFO =
 
 export const ROLE_ENFORCEMENT_INFO =
 {
-	note: 'The filter resolves identity only — it answers "who is this?". Role checks (@PreAuthorize or explicit) live in the controller or service layer, not the filter. Alerts endpoints document their own requiredRole directly on each endpoint, rather than being listed here — keeps that fact in exactly one place instead of two that can drift apart. The roles below describe JWT-authenticated callers; a valid API_KEY satisfies every tier including ADMIN, since it carries no role of its own (see AUTH_STRATEGIES.API_KEY).',
+	note: {
+		text: 'The filter resolves identity only — it answers "who is this?". Role checks (@PreAuthorize or explicit) live in the controller or service layer, not the filter. The roles below describe JWT-authenticated callers; a valid API_KEY satisfies every tier including ADMIN, since it carries no role of its own.',
+		refs: ["gw-strat-api-key"],
+	},
 	roles:
 	[
 		{

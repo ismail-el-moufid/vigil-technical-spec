@@ -1,7 +1,7 @@
-// Delivery payload shape: previously undocumented — see ep-webhooks-create's
-// criteria below for the actual spec, inlined there (not factored into a
-// module-level export) since EndpointComponents.jsx only ever renders an
-// endpoint's own fields; nothing resolves a bare export name back to a card.
+// Delivery payload shape: the full spec for it lives on the create-webhook
+// endpoint below, in its own criteria, rather than as a module-level export
+// — EndpointComponents.jsx only ever renders an endpoint's own fields, and
+// nothing resolves a bare export name back to a card.
 //
 // Shape matches Grafana OnCall's "Formatted Webhook" inbound integration
 // (POST .../integrations/v1/formatted_webhook/<id>/) field-for-field, so a

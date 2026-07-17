@@ -10,7 +10,7 @@ import { WEBHOOKS_ENDPOINTS }   from "./webhooks.js";
 import { AI_ENDPOINTS }         from "./ai.js";
 import { INTERNAL_ENDPOINTS }   from "./internal.js";
 
-export { AUTH_STRATEGIES, FILTER_CHAIN, RATE_LIMITING_INFO, ROLE_ENFORCEMENT_INFO } from "./gateway.js";
+export { AUTH_STRATEGIES, FILTER_CHAIN, STARTUP_SEQUENCE, RATE_LIMITING_INFO, ROLE_ENFORCEMENT_INFO } from "./gateway.js";
 export { AUTH_ENDPOINTS }       from "./auth.js";
 export { CONFIG_ENDPOINTS }     from "./config.js";
 export { TELEMETRY_ENDPOINTS }  from "./telemetry.js";

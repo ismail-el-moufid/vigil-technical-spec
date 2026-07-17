@@ -157,12 +157,23 @@ export const SCHEMA =
 			{
 				name: "signal_type",
 				type: "TEXT",
-				notes: "logs | metrics | traces — which ingest evaluator (ep-ingest-logs / ep-ingest-metrics / ep-ingest-traces) owns this rule. Each ingest endpoint only matches and evaluates alert_rules rows whose signal_type equals its own table; the other two skip the row entirely. This is what makes it well-defined for a rule to be evaluated by exactly one evaluator instead of being independently (and inconsistently) interpreted by all three. Set at creation, immutable thereafter — not accepted by ep-alert-rules-update's PATCH body under any circumstance, default-rule or not"
+				notes: {
+					text: "logs | metrics | traces — which ingest evaluator owns this rule. Each ingest endpoint only matches and evaluates alert_rules rows whose signal_type equals its own table; the other two skip the row entirely. This is what makes it well-defined for a rule to be evaluated by exactly one evaluator instead of being independently (and inconsistently) interpreted by all three. Set at creation, immutable thereafter — not accepted by the update endpoint's PATCH body under any circumstance, default-rule or not",
+					refs: [
+					   "ep-ingest-logs",
+					   "ep-ingest-metrics",
+					   "ep-ingest-traces",
+					   "ep-alert-rules-update"
+					],
+				}
 			},
 			{
 				name: "metric_name",
 				type: "TEXT",
-				notes: "meaning and validation depend on signal_type. metrics: open vocabulary, matched literally against the ingested point's own 'name' field — validated at create/update time against ep-telemetry-attributes' known key list (unchanged behavior from before signal_type existed). logs: closed enum, one of error_count | warning_count | critical_count | total_count — maps to a severity filter (total_count = no severity filter); any other value is a 400 at create/update. traces: closed enum, one of error_rate | span_count | avg_duration_ms | p50_duration_ms | p95_duration_ms | p99_duration_ms | max_duration_ms; any other value is a 400 at create/update. The logs/traces enums exist specifically so metric_name never depends on an undocumented mapping inside the evaluator — every value it can take is enumerated here and in ep-alert-rules-create/-update's 400 criteria"
+				notes: {
+					text: "meaning and validation depend on signal_type. metrics: open vocabulary, matched literally against the ingested point's own 'name' field — validated at create/update time against the known attribute key list (unchanged behavior from before signal_type existed). logs: closed enum, one of error_count | warning_count | critical_count | total_count — maps to a severity filter (total_count = no severity filter); any other value is a 400 at create/update. traces: closed enum, one of error_rate | span_count | avg_duration_ms | p50_duration_ms | p95_duration_ms | p99_duration_ms | max_duration_ms; any other value is a 400 at create/update. The logs/traces enums exist specifically so metric_name never depends on an undocumented mapping inside the evaluator — every value it can take is enumerated here and in the create/update endpoints' 400 criteria",
+					refs: ["ep-alert-rules-create", "ep-alert-rules-update"],
+				}
 			},
 			{
 				name: "aggregation",
@@ -242,7 +253,7 @@ export const SCHEMA =
 				name: "aggregation",
 				type: "TEXT",
 				nullable: true,
-				notes: "snapshotted from alert_rules at insert time, same reasoning as metric_name. Null both for a silence-watchdog alert and for any logs/traces-sourced alert, since aggregation is only ever non-null on signal_type = metrics rules to begin with (see alert_rules.aggregation)"
+				notes: "snapshotted from alert_rules at insert time, same reasoning as metric_name. Null both for a silence-watchdog alert and for any logs/traces-sourced alert, since aggregation is only ever non-null on signal_type = metrics rules to begin with"
 			},
 			{
 				name: "threshold",
@@ -273,7 +284,10 @@ export const SCHEMA =
 				type: "UUID",
 				pk: true,
 				fk: { table: "alert_history", column: "id" },
-				notes: "no onDelete needed: no endpoint in this spec deletes alert_history rows (alerts are only acknowledged/resolved via ep-alert-ack, never removed), so this FK's parent is never actually deleted — unlike alert_rules, which is deletable and whose FK (alert_history.rule_id) does declare SET NULL"
+				notes: {
+					text: "no onDelete needed: no endpoint in this spec deletes alert_history rows (alerts are only acknowledged/resolved, never removed), so this FK's parent is never actually deleted — unlike alert_rules, which is deletable and whose FK (alert_history.rule_id) does declare SET NULL",
+					refs: ["ep-alert-ack"],
+				}
 			},
 			{
 				name: "user_id",
@@ -358,7 +372,10 @@ export const SCHEMA =
 				name: "attributes",
 				type: "Map(String, String)",
 				nullable: true,
-				notes: "ep-telemetry-metrics' ?vigil.internal=true filter is implemented as attributes['internal'] = 'true' here — there is no dedicated 'internal' column"
+				notes: {
+					text: "The metrics endpoint's ?vigil.internal=true filter is implemented as attributes['internal'] = 'true' here — there is no dedicated 'internal' column",
+					refs: ["ep-telemetry-metrics"],
+				}
 			},
 		],
 	},

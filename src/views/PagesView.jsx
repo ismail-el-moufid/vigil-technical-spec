@@ -119,11 +119,6 @@ export default function PagesView({ highlightPageId, highlightEndpointId })
 			<div className="panel-title">Pages</div>
 			<div className="panel-sub">
 				{PAGES.length} routes in the application
-				{!isPhone && (
-					<span className="panel-sub-shortcuts">
-						<kbd>Esc</kbd> collapse one level · <kbd>Shift</kbd>+<kbd>Esc</kbd> collapse all · <kbd>1</kbd>-<kbd>9</kbd> collapse item
-					</span>
-				)}
 			</div>
 
 			<HotkeyScope>

@@ -7,8 +7,9 @@ const REFRESH_TOKEN_COOKIE =
 	secure: true,
 	sameSite: "Strict",
 	// Scoped to the whole /api/auth prefix, not just /api/auth/refresh —
-	// ep-auth-logout, ep-auth-sessions-list, and ep-auth-sessions-revoke all
-	// require this cookie as input, so a Path narrower than their shared
+	// every sibling route under that prefix that logs out, lists sessions,
+	// or revokes a session also requires this cookie as input, so a Path
+	// narrower than their shared
 	// prefix would mean the browser never attaches it to those routes.
 	path: "/api/auth",
 	// 30 days: long enough that a user isn't forced to re-login every session,
@@ -60,7 +61,10 @@ export const AUTH_ENDPOINTS =
 			[
 				"Hashed/salted passwords",
 				"Frontend + backend validation",
-				"400 returned if email is missing or not a string, or password is missing or not a string — this endpoint does not apply ep-users-create's well-formed-address format rule to email, only a presence/type check: the account being created here always has a fresh, empty users table, so there's no uniqueness collision to protect against and format-checking is left to the frontend for this one-time bootstrap flow",
+				{
+					text: "400 returned if email is missing or not a string, or password is missing or not a string — this endpoint does not apply the create endpoint's well-formed-address format rule to email, only a presence/type check: the account being created here always has a fresh, empty users table, so there's no uniqueness collision to protect against and format-checking is left to the frontend for this one-time bootstrap flow",
+					refs: ["ep-users-create"],
+				},
 				"Server checks for an existing row in users before insert — if any user already exists, returns 409 rather than creating a second admin. This is the actual enforcement behind the 'shown only before any user exists' rule described on the Setup page; the frontend route guard is a UX convenience on top of it, not the source of truth",
 				"On the non-409 path: one users row is inserted for the new admin (the Read above is only the existence check, not a substitute for this insert) — tables_actions lists this as 'Read + Insert' for the users table specifically",
 			],

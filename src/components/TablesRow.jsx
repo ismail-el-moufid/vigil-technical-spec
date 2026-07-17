@@ -1,4 +1,5 @@
 import { SCHEMA } from "../data/schema.js";
+import RefText from "./ui/RefText.jsx";
 
 function ColumnRow({ col })
 {
@@ -22,7 +23,7 @@ function ColumnRow({ col })
 				)}
 			</span>
 			{col.notes && (
-				<span className="schema-col-notes">{col.notes}</span>
+				<span className="schema-col-notes"><RefText value={col.notes} /></span>
 			)}
 		</div>
 	);

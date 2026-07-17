@@ -75,19 +75,41 @@ body {
 	display: flex;
 	align-items: center;
 	gap: 24px;
-	padding: 0 28px;
-	height: 52px;
+	padding: 6px 28px;
 	min-height: 52px;
 	border-bottom: 0.1px solid var(--border);
 	background: var(--surface);
-	z-index: 10;
+	z-index: 20;
+
+	/* Fixed + transform (not height/flow) so hiding it is a compositor-only
+	   change — no reflow of .main, which is what keeps this jank-free. It
+	   overlaps .main rather than pushing it, so .main carries a padding-top
+	   matching the live measured header height (see --topbar-h below); that
+	   also means show/hide never leaves a gap or a jump. */
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	transform: translateY(0);
+	transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+	will-change: transform;
+}
+
+.topbar--hidden {
+	transform: translateY(-100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.topbar {
+		transition: none;
+	}
 }
 
 .topbar-brand {
 	display: flex;
 	align-items: baseline;
 	gap: 10px;
-	min-width: 0;
+	flex-shrink: 0;
 }
 
 .wordmark {
@@ -190,13 +212,13 @@ body {
 .topbar-tabs {
 	display: flex;
 	align-items: stretch;
+	align-self: stretch;
 	gap: 0;
-	height: 100%;
+	flex-shrink: 0;
 }
 
 .tab-btn {
 	align-self: stretch;
-	height: 100%;
 	display: flex;
 	align-items: center;
 	gap: 7px;
@@ -255,9 +277,31 @@ body {
 	}
 }
 
+.topbar-shortcuts {
+	font-family: var(--font-mono);
+	font-size: 10.5px;
+	line-height: 2;
+	letter-spacing: 0.02em;
+	color: var(--text2);
+	opacity: 0.75;
+	min-width: 0;
+	flex: 1 1 auto;
+}
+
+.topbar-shortcuts kbd {
+	background: var(--surface2);
+	border: 0.1px solid var(--border2);
+	border-radius: 3px;
+	padding: 1px 4px;
+	font-family: var(--font-mono);
+	font-size: 9.5px;
+	text-transform: none;
+}
+
 /* ── PALETTE TRIGGER ── */
 .pal-trigger {
 	margin-left: auto;
+	flex-shrink: 0;
 	display: flex;
 	align-items: center;
 	gap: 8px;
@@ -284,6 +328,7 @@ body {
 	font-family: var(--font-mono);
 	font-size: 11.5px;
 	letter-spacing: 0.05em;
+	white-space: nowrap;
 }
 
 .pal-trigger-kbd {
@@ -353,6 +398,10 @@ body {
 	flex: 1;
 	overflow-y: auto;
 	padding: 32px 36px;
+	/* --topbar-h is set from JS (ResizeObserver on .topbar), so this tracks
+	   the header's real height, including when it wraps to two lines. The
+	   52px fallback matches .topbar's min-height for the first paint. */
+	padding-top: calc(var(--topbar-h, 52px) + 32px);
 }
 
 /* ── COMMAND PALETTE ── */
@@ -651,67 +700,6 @@ body {
 	background-color: color-mix(in srgb, var(--text) 8%, transparent);
 }
 
-/* ── FLOATING COLLAPSE BUTTONS ── */
-/* Shared fixed container — portalled into by each GroupSection whose      */
-/* header has scrolled above the viewport. Buttons stack top-to-bottom;    */
-/* no collision logic needed since each group contributes exactly one.     */
-#collapse-floats {
-	position: fixed;
-	top: 16px;
-	right: 16px;
-	display: flex;
-	flex-direction: column;
-	align-items: flex-end;
-	gap: 6px;
-	z-index: 200;
-	pointer-events: none;
-}
-
-.collapse-float-btn {
-	pointer-events: all;
-	display: flex;
-	align-items: center;
-	gap: 7px;
-	padding: 5px 10px 5px 8px;
-	background: var(--surface2);
-	border: 0.1px solid var(--border2);
-	border-radius: 6px;
-	font-family: var(--font-mono);
-	font-size: 10px;
-	font-weight: 600;
-	letter-spacing: 0.08em;
-	text-transform: uppercase;
-	color: var(--text2);
-	cursor: pointer;
-	box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
-	animation: collapse-float-in 0.18s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-.collapse-float-btn:hover {
-	color: var(--text);
-	background-color: color-mix(in srgb, var(--text) 8%, var(--surface2));
-}
-
-.collapse-float-label {
-	color: var(--text);
-	opacity: 0.5;
-	font-size: 9px;
-	letter-spacing: 0.1em;
-	padding-right: 3px;
-	border-right: 0.1px solid var(--border2);
-}
-
-@keyframes collapse-float-in {
-	from {
-		opacity: 0;
-		transform: translateX(10px);
-	}
-	to {
-		opacity: 1;
-		transform: translateX(0);
-	}
-}
-
 /* ep-card-header uses gap:12px (vs the 6px gap in .group-hd / .ep-section-head),
    so the disabled state needs a larger negative margin to cancel it fully.
    The base padding is also tightened to suit the denser card-header row —
@@ -792,7 +780,7 @@ body {
 	background: transparent;
 }
 
-.security-layer:hover {
+.infra-layer:hover {
 	border-color: var(--border);
 }
 
@@ -804,6 +792,58 @@ body {
 	user-select: none;
 	cursor: pointer;
 	transition: border-color 0.15s;
+}
+
+/* ── SECURITY CARD ── */
+/* The always-mounted reference card gets a real title (same size/weight as
+   .panel-title, the "Endpoints"/"Pages" tab heading) instead of the small
+   mono badge other cards use — it's peer-level content to the active tab,
+   not a per-endpoint detail, so it should read with the same weight. More
+   bottom margin while collapsed keeps it from crowding the tab content
+   directly beneath it; that gap tightens back up once it's open and
+   already taking up vertical space of its own. */
+.security-layer {
+	margin-bottom: 40px;
+	transition: margin-bottom 0.15s;
+}
+
+.security-layer--open {
+	margin-bottom: 20px;
+}
+
+.security-header {
+	gap: 14px;
+}
+
+.security-title {
+	font-size: 24px;
+	font-weight: 800;
+	color: var(--text);
+}
+
+.security-subtitle {
+	font-size: 12px;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+}
+
+.security-expand-hint {
+	font-size: 11px;
+	font-weight: 500;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--text2);
+	opacity: 0.6;
+	transition: opacity 0.15s, color 0.15s;
+}
+
+.security-header:hover .security-expand-hint {
+	opacity: 1;
+	color: var(--text);
+}
+
+.security-header:hover .security-toggle {
+	color: var(--text);
 }
 
 .ep-card--open .ep-card-header:hover {
@@ -1076,23 +1116,6 @@ body {
 	align-items: center;
 	flex-wrap: wrap;
 	gap: 12px;
-}
-
-.panel-sub-shortcuts {
-	font-family: var(--font-mono);
-	letter-spacing: 0.02em;
-	color: var(--text2);
-	opacity: 0.75;
-}
-
-.panel-sub-shortcuts kbd {
-	background: var(--surface2);
-	border: 0.1px solid var(--border2);
-	border-radius: 3px;
-	padding: 1px 4px;
-	font-family: var(--font-mono);
-	font-size: 10px;
-	text-transform: none;
 }
 
 /* ── HIGHLIGHT ── */
@@ -1426,13 +1449,6 @@ body {
 	align-items: center;
 }
 
-.security-note {
-	margin-top: 12px;
-	padding: 8px 4px;
-	font-style: italic;
-	color: var(--text2);
-}
-
 .page-card--open {
 	border-color: var(--border2);
 }
@@ -1446,7 +1462,7 @@ body {
 	font-size: 10px;
 }
 
-.security-meta-grid {
+.infra-meta-grid {
 	gap: 6px 12px;
 }
 
@@ -1799,6 +1815,7 @@ body {
 @media (max-width: 1024px) {
 	.main {
 		padding: 24px 20px;
+		padding-top: calc(var(--topbar-h, 52px) + 24px);
 	}
 
 	.group-hd {
@@ -1834,6 +1851,10 @@ body {
 		padding: 6px 8px;
 	}
 
+	.topbar-shortcuts {
+		display: none;
+	}
+
 	.topbar-tabs {
 		overflow-x: auto;
 		scrollbar-width: none;
@@ -1853,10 +1874,6 @@ body {
 
 	.panel-sub {
 		margin-bottom: 20px;
-	}
-
-	.panel-sub-shortcuts {
-		display: none;
 	}
 
 	.pal-backdrop {
@@ -1897,6 +1914,7 @@ body {
 @media (max-width: 480px) {
 	.main {
 		padding: 16px 12px;
+		padding-top: calc(var(--topbar-h, 52px) + 16px);
 	}
 
 	.topbar {
@@ -1949,4 +1967,91 @@ body {
 	.cookie-pill {
 		font-size: 10.5px;
 	}
+}
+
+/* ── SECURITY REFERENCE (merged INFRA + SECURITY cards) ── */
+.security-meta-grid {
+	gap: 6px 12px;
+}
+
+.startup-detail-list {
+	margin-left: 10px;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.gw-row-item {
+	display: flex;
+	align-items: baseline;
+	gap: 6px;
+}
+
+.gw-row-dot {
+	color: var(--text2);
+	opacity: 0.5;
+	flex-shrink: 0;
+}
+
+.security-note {
+	margin-left: 10px;
+	opacity: 0.8;
+}
+
+.gw-strategy-entry {
+	margin-left: 10px;
+	padding: 8px 0;
+	border-top: 0.1px solid var(--border2);
+}
+
+.gw-strategy-head {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	cursor: pointer;
+	user-select: none;
+}
+
+.gw-strategy-entry .collapsible-inner {
+	margin-top: 6px;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+/* ── REF PILL ── */
+/* Inline jump-to-target pill rendered by RefText after any cross-referencing
+   prose. Styled like a tiny, understated link rather than a full pill/badge
+   so it doesn't compete visually with the constraint text it follows. */
+.ref-inline {
+	display: inline;
+}
+
+.ref-inline__fact {
+	color: var(--text2);
+}
+
+.ref-inline__fact q {
+	font-style: italic;
+}
+
+.ref-pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
+	background: none;
+	border: 0.1px solid var(--border2);
+	border-radius: 3px;
+	color: var(--text2);
+	font-family: var(--font-mono);
+	font-size: 11px;
+	padding: 0px 5px;
+	margin-left: 6px;
+	cursor: pointer;
+	transition: color 0.1s, border-color 0.1s;
+}
+
+.ref-pill:hover {
+	color: var(--text);
+	border-color: var(--border);
 }

@@ -72,7 +72,10 @@ export const USERS_ENDPOINTS =
 		constraints: {
 			criteria: [
 				"User Management Major (2pt)",
-				"400 returned if email isn't a well-formed address (local-part@domain, no whitespace, standard RFC 5322-subset check) — validated before the uniqueness lookup below, same 'checked before insert' pattern used throughout this spec. This is the only endpoint that defines the rule; ep-users-update and ep-users-me reuse it verbatim since they write the same column. ep-auth-setup's email field is validated for presence/type only, not this format rule — see that endpoint's own criteria",
+				{
+					text: "400 returned if email isn't a well-formed address (local-part@domain, no whitespace, standard RFC 5322-subset check) — validated before the uniqueness lookup below, same 'checked before insert' pattern used throughout this spec. This is the only endpoint that defines the rule; the update and self-update endpoints reuse it verbatim since they write the same column. The setup endpoint's email field is validated for presence/type only, not this format rule",
+					refs: ["ep-users-update", "ep-users-me", "ep-auth-setup"],
+				},
 				"409 returned if email collides with the existing unique constraint on users.email — checked before insert, not left as an unhandled DB constraint violation",
 				"400 returned if role is present but not one of admin | viewer — same validation pattern as severity on the alert rules endpoints",
 			],
@@ -106,7 +109,10 @@ export const USERS_ENDPOINTS =
 			criteria: [
 				"Identity resolved from the SecurityContext principal (JWT) — no path param, always the caller's own row",
 				"Closes the gap left by login/setup only returning { role, access_token }: this is the documented way the frontend gets its own id/email (e.g. to pre-fill the change-email form behind PATCH /api/users/me), rather than decoding the opaque access token client-side",
-				"Read grant is ADMIN_/_VIEWER here vs. ADMIN-only on ep-users-list (GET /api/users) — confirmed intentional, not over-scoped: this endpoint only ever returns the caller's own row (see above), so it carries none of the full-directory disclosure ep-users-list's ADMIN gate exists to prevent; same reasoning pattern as ep-alert-rules-list's and ep-telemetry-attributes' ADMIN_/_VIEWER grants",
+				{
+					text: "Read grant is ADMIN_/_VIEWER here vs. ADMIN-only on the users list endpoint (GET /api/users) — confirmed intentional, not over-scoped: this endpoint only ever returns the caller's own row (see above), so it carries none of the full-directory disclosure that endpoint's ADMIN gate exists to prevent; same reasoning pattern used elsewhere for ADMIN_/_VIEWER grants on otherwise-sensitive tables",
+					refs: ["ep-users-list"],
+				},
 			],
 			security: [],
 			rateLimit: "10 req/min",
@@ -146,7 +152,10 @@ export const USERS_ENDPOINTS =
 		tables_actions: { users: "Update" },
 		constraints: {
 			criteria: [
-				"400 returned if email is present but malformed — same well-formed-address check as ep-users-create, not a separately-specified rule",
+				{
+					text: "400 returned if email is present but malformed — same well-formed-address check as on create, not a separately-specified rule",
+					refs: ["ep-users-create"],
+				},
 				"409 returned if a requested email collides with another user's users.email unique constraint",
 			],
 			security: [],
@@ -191,9 +200,15 @@ export const USERS_ENDPOINTS =
 		constraints: {
 			criteria:
 			[
-				"If role: viewer is requested and the target is currently the only user with role: admin, request is rejected with 409 — same guard as ep-users-delete, since demotion is functionally equivalent to removal",
+				{
+					text: "If role: viewer is requested and the target is currently the only user with role: admin, request is rejected with 409 — same guard as on delete, since demotion is functionally equivalent to removal",
+					refs: ["ep-users-delete"],
+				},
 				"If email is requested and collides with another user's users.email unique constraint, request is rejected with 409 — both 409 causes share the status code but carry distinct 'code' values (LAST_ADMIN vs EMAIL_TAKEN); clients should branch on 'code', not the 'error' message text",
-				"400 returned if email is present but malformed — same well-formed-address check as ep-users-create, not a separately-specified rule",
+				{
+					text: "400 returned if email is present but malformed — same well-formed-address check as on create, not a separately-specified rule",
+					refs: ["ep-users-create"],
+				},
 				"400 returned if role is present but not one of admin | viewer — same validation pattern as severity on the alert rules endpoints, checked before the 409 last-admin guard",
 				"400 returned if the {id} path segment isn't a syntactically valid UUID — malformed path params are rejected the same way as malformed body fields above, not left to fall through to an unhandled 500 or a misleading 404",
 			],
@@ -241,7 +256,10 @@ export const USERS_ENDPOINTS =
 				"400 returned if the {id} path segment isn't a syntactically valid UUID — malformed path params are rejected the same way as malformed query params or body fields elsewhere in this spec, not left to fall through to an unhandled 500 or a misleading 404",
 			],
 			security: [
-				"Deleting a user cascades sessions/refresh_tokens immediately (their next /api/auth/refresh will fail), but does not and cannot revoke any access token already issued to them — AUTH_STRATEGIES.JWT validates signature/expiry only, no DB hit per request. A just-deleted user (including a self-deleted admin) can keep making authenticated calls on that still-valid token until it naturally expires, up to the full 15-minute TTL. This is the same claims-lag tradeoff already accepted for demotion (see AUTH_STRATEGIES.JWT), extended here to deletion rather than a separate gap",
+				{
+					text: "Deleting a user cascades sessions/refresh_tokens immediately (their next /api/auth/refresh will fail), but does not and cannot revoke any access token already issued to them — validates signature/expiry only, no DB hit per request. A just-deleted user (including a self-deleted admin) can keep making authenticated calls on that still-valid token until it naturally expires, up to the full 15-minute TTL. This is the same claims-lag tradeoff already accepted for demotion, extended here to deletion rather than a separate gap",
+					refs: ["gw-strat-jwt"],
+				},
 			],
 			rateLimit: "10 req/min",
 			realtime: "None",

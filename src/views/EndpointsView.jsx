@@ -1,10 +1,9 @@
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { ENDPOINTS } from "../data";
 import { isPhone } from "../utils/device.js";
 import useOpenState from "../hooks/useOpenState.js";
 import { HotkeyScope } from "../hooks/HotkeyScope";
 import MetaGroupSection from "../components/MetaGroupSection.jsx";
-import SecurityLayer from "../components/SecurityLayer.jsx";
 
 /**
  * EndpointsView displays all endpoints grouped by visibility and logical groups.
@@ -37,16 +36,14 @@ export default function EndpointsView({ highlightId })
 		"External Facing",
 		"Internal Facing",
 	]);
-	const [secOpen, setSecOpen] = useState(true);
-
 	// --- Global collapse shortcuts ---------------------------------------
 	// Esc            - "step" collapse: closes every currently-open item at
 	//                   the deepest open level, then walks up one level per
 	//                   press (payload frames -> card attrs -> cards ->
-	//                   groups -> meta groups -> security layer).
+	//                   groups -> meta groups).
 	// Shift+Esc      - collapses absolutely everything in one press.
 	//
-	// Depth model: meta groups and the security layer sit at depth 0, groups
+	// Depth model: meta groups sit at depth 0, groups
 	// at depth 1, and every openKeys entry at depth (1 + colon count) — since
 	// every child key in this codebase is built as `parentKey + ":" + suffix`,
 	// colon count already encodes nesting depth, so no separate bookkeeping
@@ -57,7 +54,6 @@ export default function EndpointsView({ highlightId })
 	function collectOpenItems()
 	{
 		const items = [];
-		if (secOpen) items.push({ type: "sec", depth: 0 });
 		for (const key of openMetaGroups) items.push({ type: "meta", key, depth: 0 });
 		for (const key of openGroups) items.push({ type: "group", key, depth: 1 });
 		for (const key of openKeys)
@@ -75,7 +71,6 @@ export default function EndpointsView({ highlightId })
 		const maxDepth = Math.max(...items.map((i) => i.depth));
 		const atMax = items.filter((i) => i.depth === maxDepth);
 
-		if (atMax.some((i) => i.type === "sec")) setSecOpen(false);
 		const metaKeys = new Set(atMax.filter((i) => i.type === "meta").map((i) => i.key));
 		if (metaKeys.size) collapseMetaGroups((k) => metaKeys.has(k));
 		const groupKeys = new Set(atMax.filter((i) => i.type === "group").map((i) => i.key));
@@ -86,7 +81,6 @@ export default function EndpointsView({ highlightId })
 
 	function collapseAll()
 	{
-		setSecOpen(false);
 		collapseMetaGroups(() => true);
 		collapseGroups(() => true);
 		collapseMatching(() => true);
@@ -107,7 +101,7 @@ export default function EndpointsView({ highlightId })
 		window.addEventListener("keydown", handleKeyDown);
 		return () => window.removeEventListener("keydown", handleKeyDown);
 	// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [openKeys, openGroups, openMetaGroups, secOpen]);
+	}, [openKeys, openGroups, openMetaGroups]);
 
 	const external = ENDPOINTS.filter((ep) => !ep.internal);
 	const internal = ENDPOINTS.filter((ep) => ep.internal);
@@ -180,17 +174,9 @@ export default function EndpointsView({ highlightId })
 			<div className="panel-title">Endpoints</div>
 			<div className="panel-sub">
 				{ENDPOINTS.length} total across all services
-				{!isPhone && (
-					<span className="panel-sub-shortcuts">
-						<kbd>Esc</kbd> collapse one level · <kbd>Shift</kbd>+<kbd>Esc</kbd> collapse all · <kbd>1</kbd>-<kbd>9</kbd> collapse item
-					</span>
-				)}
 			</div>
 
 			<HotkeyScope>
-				{/* Infrastructure Security Layer, applies to ALL endpoints */}
-				<SecurityLayer open={secOpen} onToggle={() => setSecOpen((o) => !o)} />
-
 				{metaGroups.map(([meta, eps]) =>
 				{
 					const isMetaOpen = openMetaGroups.has(meta);

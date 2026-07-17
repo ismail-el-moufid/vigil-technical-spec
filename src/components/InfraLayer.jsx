@@ -3,25 +3,26 @@ import { useCollapseHotkey } from "../hooks/useCollapseHotkey";
 import CollapseToggle from "./ui/CollapseToggle.jsx";
 
 /**
- * SecurityLayer displays infrastructure security info that applies to ALL endpoints.
- * Uses the same card design as EndpointCard for consistency.
+ * InfraLayer displays startup/setup and gateway infrastructure info that
+ * applies to ALL endpoints (boot sequence, filter chain). Uses the same
+ * card design as EndpointCard for consistency.
  */
-export default function SecurityLayer({ open, onToggle })
+export default function InfraLayer({ open, onToggle })
 {
-	// onToggle flips secOpen, so calling it while open closes it — the same
+	// onToggle flips infraOpen, so calling it while open closes it — the same
 	// behavior the header click already relies on.
 	const hotkeyNumber = useCollapseHotkey(open, onToggle);
 	const collapsibleClass = `collapsible${open ? " collapsible--open" : ""}`;
 	return (
-		<div className="security-layer">
+		<div className="infra-layer">
 			<div className="ep-card-header" onClick={onToggle}>
-				<span className="badge badge--sec">SECURITY</span>
-				<span className="ep-route">Spring Security · Bucket4j</span>
+				<span className="badge badge--infra">INFRA</span>
+				<span className="ep-route">Startup · Spring Security · Bucket4j</span>
 				<CollapseToggle collapsed={!open} hotkeyNumber={hotkeyNumber} className="ep-toggle" />
 			</div>
 			<div className={collapsibleClass}>
 				<div className="collapsible-inner ep-body">
-					<div className="ep-meta-grid security-meta-grid">
+					<div className="ep-meta-grid infra-meta-grid">
 						<span className="meta-label">Startup</span>
 						<span className="meta-value meta-value--mono">
 							{STARTUP_SEQUENCE.map((n) => n.label).join(" → ")}
@@ -38,9 +39,6 @@ export default function SecurityLayer({ open, onToggle })
 								<span className="constraint-text">{n.label}: {n.sub}</span>
 							</div>
 						))}
-					</div>
-					<div className="security-note">
-						Infrastructure layer - per-endpoint auth strategies are shown in each endpoint below.
 					</div>
 				</div>
 			</div>
