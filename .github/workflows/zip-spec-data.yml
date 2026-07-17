@@ -2,13 +2,13 @@ name: Export spec data as JSON
 
 # Manually trigger from the Actions tab, or it fires automatically whenever
 # src/data/**.js changes on main. Either way it converts src/data's exports
-# to JSON and publishes a GitHub Release with the zip attached, so you
+# to JSON and publishes a GitHub Release with the JSON files attached, so you
 # always have a stable download link to hand to an AI tool.
 
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [master]
     paths:
       - "src/data/**"
 
@@ -30,11 +30,6 @@ jobs:
       - name: Export data as JSON
         run: node scripts/export-json.mjs dist/json
 
-      - name: Zip JSON output
-        run: |
-          cd dist/json
-          zip -r ../spec-data.zip .
-
       - name: Generate release tag
         id: tag
         run: echo "tag=data-$(date +%Y%m%d-%H%M%S)" >> "$GITHUB_OUTPUT"
@@ -44,9 +39,9 @@ jobs:
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
           name: "Spec data — ${{ steps.tag.outputs.tag }}"
-          files: dist/spec-data.zip
+          files: dist/json/*.json
           body: |
             Auto-generated JSON export of `src/data`'s exports (one file per
             export, plus `all.json` with everything combined) as of this
-            commit. Download `spec-data.zip` below and hand it straight to
-            an AI tool.
+            commit. Download the attached JSON files below and hand them
+            straight to an AI tool.
