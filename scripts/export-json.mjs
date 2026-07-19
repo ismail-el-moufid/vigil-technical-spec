@@ -19,7 +19,7 @@ const outDir = process.argv[2] ?? "dist/json";
 mkdirSync(outDir, { recursive: true });
 
 for (const [name, value] of Object.entries(data)) {
-	writeFileSync(join(outDir, `${name.toLocaleLowerCase()}.json`), JSON.stringify(value, null, 2));
+	writeFileSync(join(outDir, `${name.toLocaleLowerCase().replaceAll("_", " ")}.json`), JSON.stringify(value, null, 2));
 }
 
 writeFileSync(join(outDir, "Spec.json"), JSON.stringify(data, null, 2));
