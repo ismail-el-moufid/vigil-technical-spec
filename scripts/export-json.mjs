@@ -104,10 +104,23 @@ const backend = {
 // ROLE_ENFORCEMENT_INFO. Pulled in by name rather than spreading all of
 // `security`, since Filter chain / Startup sequence / Rate limiting info
 // are backend/infra concerns the frontend doesn't implement against.
+//
+// API_KEY and INTERNAL_ONLY are dropped from the frontend's copy of Auth
+// strategies specifically: API_KEY is an operator/service credential the
+// browser client never holds or sends, and INTERNAL_ONLY only gates
+// /internal/* routes the frontend can never reach in the first place.
+// Neither is a strategy a frontend dev implements against.
+const FRONTEND_EXCLUDED_AUTH_STRATEGIES = new Set(["API_KEY", "INTERNAL_ONLY"]);
+const frontendAuthStrategies = Object.fromEntries(
+    Object.entries(security["Auth strategies"] ?? {}).filter(
+        ([key]) => !FRONTEND_EXCLUDED_AUTH_STRATEGIES.has(key)
+    )
+);
+
 const frontend = {
     Pages: data.PAGES,
     Endpoints: endpointsArray,
-    AuthStrategies: security["Auth strategies"],
+    AuthStrategies: frontendAuthStrategies,
     RoleEnforcement: security["Role enforcement info"],
 };
 
