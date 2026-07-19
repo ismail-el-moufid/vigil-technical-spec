@@ -32,7 +32,10 @@ export const WEBHOOKS_ENDPOINTS =
 		tables: ["webhooks"],
 		tables_actions: { webhooks: "Read" },
 		constraints: {
-			criteria: [],
+			criteria:
+			[
+				"Unpaginated by design, unlike the telemetry/alerts list endpoints: this is an admin-managed list of registered webhook targets, not a continuously-inserted table, so it's expected to stay small enough that a bare array with no page size, offset, or hasMore is an accepted scope decision rather than an oversight",
+			],
 			security: [],
 			rateLimit: "10 req/min",
 			realtime: "None",

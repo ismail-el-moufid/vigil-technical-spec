@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import useBorderSpotlight from "../hooks/useBorderSpotlight.js";
+import useMergedRef from "../hooks/useMergedRef.js";
 import { useCollapseHotkey } from "../hooks/useCollapseHotkey";
 import GroupHeader from "./ui/GroupHeader.jsx";
 
@@ -33,7 +34,8 @@ export default function GroupSection({
 })
 {
 	const isCollapsed = !openGroups.has(group);
-	const ref = useBorderSpotlight(isCollapsed);
+	const spotlightRef = useBorderSpotlight(isCollapsed);
+	const [ref, nodeRef] = useMergedRef(spotlightRef);
 	const hdRef = useRef(null);
 
 	// Once true, stays true — children enter the DOM on first expand and
@@ -67,7 +69,7 @@ export default function GroupSection({
 		handleCollapseAll();
 		toggleGroup(group);
 	}
-	const hotkeyNumber = useCollapseHotkey(!isCollapsed, handleHotkeyCollapse);
+	const hotkeyNumber = useCollapseHotkey(!isCollapsed, handleHotkeyCollapse, nodeRef);
 
 	// Single source of truth for "click to toggle": fires for clicks on the
 	// legend (header), the wrapper's own padding, or directly on the bare

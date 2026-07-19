@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { FILTER_CHAIN, STARTUP_SEQUENCE } from "../data";
 import { useCollapseHotkey } from "../hooks/useCollapseHotkey";
 import CollapseToggle from "./ui/CollapseToggle.jsx";
@@ -11,10 +12,11 @@ export default function InfraLayer({ open, onToggle })
 {
 	// onToggle flips infraOpen, so calling it while open closes it — the same
 	// behavior the header click already relies on.
-	const hotkeyNumber = useCollapseHotkey(open, onToggle);
+	const ref = useRef(null);
+	const hotkeyNumber = useCollapseHotkey(open, onToggle, ref);
 	const collapsibleClass = `collapsible${open ? " collapsible--open" : ""}`;
 	return (
-		<div className="infra-layer">
+		<div className="infra-layer" ref={ref}>
 			<div className="ep-card-header" onClick={onToggle}>
 				<span className="badge badge--infra">INFRA</span>
 				<span className="ep-route">Startup · Spring Security · Bucket4j</span>

@@ -1154,15 +1154,24 @@ body {
 	--color-platform-engineer: #ff8c3a;
 }
 
-/* ── CONSTRAINT TAG COLORS ── */
+/* ── CONSTRAINT TAG COLORS ──
+   Deliberately grayscale-plus-one-accent, not one hue per tag. `sec` keeps
+   red because it's the one tag flagging an actual security-relevant
+   boundary — worth a stop-and-look reaction. Every other tag (rate,
+   realtime, fallback, dedup, crit, permit) used to carry its own saturated
+   hue; with 7+ colors competing for attention at once in an expanded card,
+   none of them actually pop, they just add visual noise. These are now
+   distinguished by weight/opacity within a single neutral gray family
+   instead, which is what the reader's eye can actually parse at a glance,
+   especially on a small mobile viewport. */
 :root {
 	--color-constraint-sec: #ff3d5e;
-	--color-constraint-rate: #ff8c3a;
-	--color-constraint-realtime: #d07aff;
-	--color-constraint-fallback: #ffe066;
-	--color-constraint-dedup: #3dc9ff;
-	--color-constraint-crit: #00ffb3;
-	--color-constraint-permit: #a0a0b8;
+	--color-constraint-rate: #d4d4de;
+	--color-constraint-realtime: #d4d4de;
+	--color-constraint-fallback: #9a9aa8;
+	--color-constraint-dedup: #9a9aa8;
+	--color-constraint-crit: #d4d4de;
+	--color-constraint-permit: #9a9aa8;
 
 	/* Auth vs Role deliberately live outside the constraint-tag palette above:
 	   those colors are keyed by tagType (sec/rate/permit/...), which auth
@@ -1449,6 +1458,13 @@ body {
 	align-items: center;
 }
 
+.auth-none-note {
+	font-size: 11px;
+	font-style: italic;
+	color: var(--text2);
+	opacity: 0.75;
+}
+
 .page-card--open {
 	border-color: var(--border2);
 }
@@ -1582,11 +1598,14 @@ body {
 .query-param-pill {
 	display: inline-flex;
 	align-items: baseline;
-	gap: 5px;
+	flex-wrap: wrap;
+	gap: 2px 5px;
 	padding: 3px 8px;
 	border-radius: 999px;
 	font-family: var(--font-mono);
 	font-size: 11.5px;
+	max-width: 100%;
+	min-width: 0;
 }
 
 .query-param-pill--required {
@@ -1596,6 +1615,8 @@ body {
 
 .query-param-name {
 	color: var(--text);
+	white-space: nowrap;
+	flex-shrink: 0;
 }
 
 .query-param-type {
@@ -1603,6 +1624,9 @@ body {
 	font-size: 10px;
 	text-transform: uppercase;
 	letter-spacing: 0.04em;
+	min-width: 0;
+	white-space: normal;
+	overflow-wrap: break-word;
 }
 
 /* ── Cookie rows (request receives / response sets / clears) ─────────── */

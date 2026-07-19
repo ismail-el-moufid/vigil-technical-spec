@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
 	FILTER_CHAIN,
 	STARTUP_SEQUENCE,
@@ -52,19 +52,34 @@ function CollapsibleEntry({ id, tag, tagType, label, items, open, onToggle, high
  * one: startup sequence, filter chain, rate limiting, role enforcement, and
  * the full auth-strategy catalog. Mounted once at the App level (not per
  * tab) since all of this applies to every endpoint regardless of which tab
- * is active. Collapsed by default (and each Rate Limiting / Role
- * Enforcement / Auth Strategy row within it, once opened, starts collapsed
- * too) — this is reference material, not something that needs to compete
- * for space with the active tab on load.
+ * is active. Collapsed by default — this is reference material, not
+ * something that needs to compete for space with the active tab on load.
+ * The Rate Limiting, Role Enforcement, and Auth Strategy Catalog groups are
+ * themselves collapsible sections (also collapsed by default), and each row
+ * within an opened section starts collapsed too, same as the card itself.
  */
 export default function SecurityReference({ open, onToggle, activeStratId })
 {
-	const hotkeyNumber = useCollapseHotkey(open, onToggle);
+	const ref = useRef(null);
+	const hotkeyNumber = useCollapseHotkey(open, onToggle, ref);
 	const collapsibleClass = `collapsible${open ? " collapsible--open" : ""}`;
 	const [openEntries, setOpenEntries] = useState(() => new Set());
 	const [highlighted, setHighlighted] = useState(null);
+	// Section-level collapse for the three reference groups below (Rate
+	// Limiting, Role Enforcement, Auth Strategy Catalog) — separate from
+	// openEntries, which tracks the individual rows *within* each group.
+	// Collapsed by default, same reasoning as the card itself: reference
+	// material that shouldn't compete for space on load.
+	const [openSections, setOpenSections] = useState(() => new Set());
 
 	const toggleEntry = (id) => setOpenEntries((prev) =>
+	{
+		const next = new Set(prev);
+		next.has(id) ? next.delete(id) : next.add(id);
+		return next;
+	});
+
+	const toggleSection = (id) => setOpenSections((prev) =>
 	{
 		const next = new Set(prev);
 		next.has(id) ? next.delete(id) : next.add(id);
@@ -79,6 +94,7 @@ export default function SecurityReference({ open, onToggle, activeStratId })
 		const openTimer = setTimeout(() =>
 		{
 			if (!open) onToggle();
+			setOpenSections((prev) => new Set(prev).add("auth"));
 			setOpenEntries((prev) => new Set(prev).add(activeStratId));
 		}, 0);
 		const t = setTimeout(() =>
@@ -105,7 +121,7 @@ export default function SecurityReference({ open, onToggle, activeStratId })
 	}, [activeStratId]);
 
 	return (
-		<div className={"security-layer" + (open ? " security-layer--open" : "")}>
+		<div className={"security-layer" + (open ? " security-layer--open" : "")} ref={ref}>
 			<div className="ep-card-header security-header" onClick={onToggle}>
 				<span className="security-title">Security</span>
 				<span className="ep-route security-subtitle">Startup · Spring Security · Bucket4j</span>
@@ -133,58 +149,87 @@ export default function SecurityReference({ open, onToggle, activeStratId })
 						))}
 					</div>
 
-					<div className="ep-section-head">Rate Limiting</div>
-					{RATE_LIMITING_INFO.map((r) =>
-					{
-						const id = `rate:${r.tag}`;
-						return (
-							<CollapsibleEntry
-								key={id}
-								tag={r.tag}
-								tagType={r.tagType}
-								label={r.label}
-								items={r.items}
-								open={openEntries.has(id)}
-								onToggle={() => toggleEntry(id)}
-							/>
-						);
-					})}
-
-					<div className="ep-section-head">Role Enforcement</div>
-					<div className="constraint-text security-note">
-						<RefText value={ROLE_ENFORCEMENT_INFO.note} />
+					<div
+						className="ep-section-head used-by-head"
+						onClick={() => toggleSection("rate")}
+					>
+						Rate Limiting
+						<CollapseToggle collapsed={!openSections.has("rate")} className="ep-toggle" />
 					</div>
-					{ROLE_ENFORCEMENT_INFO.roles.map((r) =>
-					{
-						const id = `role:${r.tag}`;
-						return (
-							<CollapsibleEntry
-								key={id}
-								tag={r.tag}
-								tagType={r.tagType}
-								label={r.label}
-								items={r.items}
-								open={openEntries.has(id)}
-								onToggle={() => toggleEntry(id)}
-								renderItem={(item) => item}
-							/>
-						);
-					})}
+					<div className={"collapsible" + (openSections.has("rate") ? " collapsible--open" : "")}>
+						<div className="collapsible-inner">
+							{RATE_LIMITING_INFO.map((r) =>
+							{
+								const id = `rate:${r.tag}`;
+								return (
+									<CollapsibleEntry
+										key={id}
+										tag={r.tag}
+										tagType={r.tagType}
+										label={r.label}
+										items={r.items}
+										open={openEntries.has(id)}
+										onToggle={() => toggleEntry(id)}
+									/>
+								);
+							})}
+						</div>
+					</div>
 
-					<div className="ep-section-head">Auth Strategy Catalog</div>
-					{STRATEGY_LIST.map((s) => (
-						<CollapsibleEntry
-							key={s.id}
-							id={s.id}
-							tag={s.tag}
-							tagType={s.tagType}
-							label={s.label}
-							items={s.items}
-							open={openEntries.has(s.id)}
-							onToggle={() => toggleEntry(s.id)}
-							highlighted={highlighted === s.id}
-						/>
-					))}
+					<div
+						className="ep-section-head used-by-head"
+						onClick={() => toggleSection("role")}
+					>
+						Role Enforcement
+						<CollapseToggle collapsed={!openSections.has("role")} className="ep-toggle" />
+					</div>
+					<div className={"collapsible" + (openSections.has("role") ? " collapsible--open" : "")}>
+						<div className="collapsible-inner">
+							<div className="constraint-text security-note">
+								<RefText value={ROLE_ENFORCEMENT_INFO.note} />
+							</div>
+							{ROLE_ENFORCEMENT_INFO.roles.map((r) =>
+							{
+								const id = `role:${r.tag}`;
+								return (
+									<CollapsibleEntry
+										key={id}
+										tag={r.tag}
+										tagType={r.tagType}
+										label={r.label}
+										items={r.items}
+										open={openEntries.has(id)}
+										onToggle={() => toggleEntry(id)}
+									/>
+								);
+							})}
+						</div>
+					</div>
+
+					<div
+						className="ep-section-head used-by-head"
+						onClick={() => toggleSection("auth")}
+					>
+						Auth Strategy Catalog
+						<CollapseToggle collapsed={!openSections.has("auth")} className="ep-toggle" />
+					</div>
+					<div className={"collapsible" + (openSections.has("auth") ? " collapsible--open" : "")}>
+						<div className="collapsible-inner">
+							{STRATEGY_LIST.map((s) => (
+								<CollapsibleEntry
+									key={s.id}
+									id={s.id}
+									tag={s.tag}
+									tagType={s.tagType}
+									label={s.label}
+									items={s.items}
+									open={openEntries.has(s.id)}
+									onToggle={() => toggleEntry(s.id)}
+									highlighted={highlighted === s.id}
+								/>
+							))}
+						</div>
+					</div>
 				</div>
 			</div>
 		</div>

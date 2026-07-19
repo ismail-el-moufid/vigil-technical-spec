@@ -22,6 +22,6 @@ for (const [name, value] of Object.entries(data)) {
 	writeFileSync(join(outDir, `${name.toLocaleLowerCase()}.json`), JSON.stringify(value, null, 2));
 }
 
-writeFileSync(join(outDir, "all.json"), JSON.stringify(data, null, 2));
+writeFileSync(join(outDir, "Spec.json"), JSON.stringify(data, null, 2));
 
 console.log(`Wrote ${Object.keys(data).length} exports + all.json to ${outDir}/`);

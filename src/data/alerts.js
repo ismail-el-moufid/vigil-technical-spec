@@ -127,7 +127,7 @@ export const ALERT_ENDPOINTS =
 			criteria: [
 				"count defaults to 20 when omitted; hasMore derived server-side: returned.length === count",
 				{
-					text: "400 returned if count is present but non-numeric or outside 1-100 (same bound as the alerts list endpoint), or offset is present but non-numeric or negative",
+					text: "400 returned if count is present but non-numeric or outside 1-100, or offset is present but non-numeric or negative",
 					refs: ["ep-alerts-list"],
 				},
 				{
@@ -170,7 +170,6 @@ export const ALERT_ENDPOINTS =
 			query: [],
 			body:
 			[
-				{ name: "service",  type: "string",  required: true },
 				{ name: "signal_type", type: "logs | metrics | traces", required: true },
 				{
 				   name: "metric_name",
@@ -246,7 +245,7 @@ export const ALERT_ENDPOINTS =
 				{
 				   name: "metric_name",
 				   type: {
-				      text: "string — metric_name itself is editable; its valid values are constrained by the target row's signal_type, which is immutable (see criteria below) — same validation as on create",
+				      text: "string — metric_name itself is editable; its valid values are constrained by the target row's immutable signal_type: for logs, one of error_count | warning_count | critical_count | total_count; for traces, one of error_rate | span_count | avg_duration_ms | p50_duration_ms | p95_duration_ms | p99_duration_ms | max_duration_ms; for metrics, checked against the known attribute key list rather than a fixed enum",
 				      refs: ["ep-alert-rules-create"]
 				   },
 				   required: false
@@ -373,7 +372,7 @@ export const ALERT_ENDPOINTS =
 			criteria: [
 				"Same service method as WebSocket ack",
 				"Upserts on (alert_id, user_id) — re-acking updates the caller's own record, does not create duplicates, and survives the caller later changing their own email",
-				"This REST path and the WS ack frame have independent rate-limit buckets (10 req/min per-IP here vs 10 req/min per-session on the socket). Not a practical double-budget: the frontend only ever acks over its own already-open /api/alerts/ws connection — it holds a single long-lived socket per session for exactly this; this REST endpoint exists for API-key clients that aren't holding a socket open, so in normal use only one bucket is ever exercised per caller",
+				"This REST path and the WS ack frame have independent rate-limit buckets (10 req/min per-IP here vs 10 req/min per-session on the socket). Not a practical double-budget: the frontend only ever acks over its own already-open WebSocket connection — it holds a single long-lived socket per session for exactly this; this REST endpoint exists for API-key clients that aren't holding a socket open, so in normal use only one bucket is ever exercised per caller",
 				"400 returned if the {id} path segment isn't a syntactically valid UUID, same as the existing 400 for a malformed status field — malformed path params get the same treatment as malformed body fields, not an unhandled 500 or a misleading 404",
 			],
 			security: [

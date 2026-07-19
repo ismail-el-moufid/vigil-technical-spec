@@ -4,6 +4,7 @@ import Badge from "./ui/Badge.jsx";
 import RolePill from "./ui/RolePill.jsx";
 import TablesRow from "./TablesRow.jsx";
 import useMaskSpotlight from "../hooks/useMaskSpotlight.js";
+import useMergedRef from "../hooks/useMergedRef.js";
 import { useCollapseHotkey } from "../hooks/useCollapseHotkey";
 import CollapseToggle from "./ui/CollapseToggle.jsx";
 import RefText from "./ui/RefText.jsx";
@@ -191,50 +192,93 @@ function formatShape(str)
 // they get their own label and their own color family (access-color--auth /
 // access-color--role) rather than sharing tagType-derived colors that could
 // coincidentally collide between an auth strategy and a role.
-function AccessRow({ ep, openKey, isOpenState, toggleOpenState })
+//
+// The Auth pill row/panel mirrors TablesRow's pattern exactly (single-open:
+// clicking a new strategy swaps to it rather than stacking open panels, and
+// the panel remounts on switch via key={openStratId} for the same fresh
+// fade-in instead of animating open/closed in place) — same interaction,
+// just a strategy name instead of a table name.
+function AccessRow({
+	ep,
+	openKey,
+	isOpenState,
+	toggleOpenState,
+	collapseMatching,
+	hideApiKey = false,
+})
 {
-	const strats   = (ep.authStrategy || []).map((k) => AUTH_STRATEGIES[k]).filter(Boolean);
+	// API_KEY is an operator/service credential (external API clients, etc.),
+	// never something the frontend itself sends — see AUTH_STRATEGIES.API_KEY's
+	// own notes in gateway.js. hideApiKey is only true when this card is
+	// nested in a page's "Endpoints used" list (see EndpointCard's showUsedBy)
+	// — that's the frontend-facing view of "what does this page call and how
+	// do I auth it", so API_KEY shouldn't appear there. The top-level
+	// Endpoints tab is full reference documentation for everyone (backend
+	// included), so it keeps showing every strategy an endpoint accepts.
+	// Every endpoint that currently accepts API_KEY also accepts JWT, so this
+	// filter never empties the list outright when it applies; if that ever
+	// stops being true for some future endpoint, this would need to fall
+	// back to something other than silently showing "no auth" for it.
+	const strats = (ep.authStrategy || [])
+		.filter((k) => !(hideApiKey && k === "API_KEY"))
+		.map((k) => AUTH_STRATEGIES[k])
+		.filter(Boolean);
 	const roleInfo = ep.requiredRole && ROLE_INFO_BY_KEY[ep.requiredRole];
-	if (!strats.length && !roleInfo) return null;
 
-	const openStratId = strats.find((s) => isOpenState(openKey + ":auth:" + s.id))?.id ?? null;
+	const openStrat = strats.find((s) => isOpenState(openKey + ":auth:" + s.id)) ?? null;
+
+	function handleStratClick(s)
+	{
+		const stratKey       = openKey + ":auth:" + s.id;
+		const switchingToNew = openStrat !== null && openStrat.id !== s.id;
+		if (switchingToNew) collapseMatching((k) => k.startsWith(openKey + ":auth:"));
+		toggleOpenState(stratKey);
+	}
 
 	return (
 		<>
-			{strats.length > 0 && (
+			<span className="meta-label meta-label--auth">Auth</span>
+			{strats.length > 0 ? (
 				<>
-					<span className="meta-label meta-label--auth">Auth</span>
 					<span className="meta-value meta-value--auth">
 						{strats.map((s) => (
 							<button
 								key={s.id}
-								className={"auth-strat-pill access-color--auth" + (openStratId === s.id ? " auth-strat-pill--open" : "")}
-								onClick={() => toggleOpenState(openKey + ":auth:" + s.id)}
+								className={"auth-strat-pill access-color--auth" + (openStrat?.id === s.id ? " auth-strat-pill--open" : "")}
+								onClick={() => handleStratClick(s)}
 							>
 								{s.tag}{" "}
 								<span className="auth-strat-pill-chevron">
-									{openStratId === s.id ? "▲" : "▼"}
+									{openStrat?.id === s.id ? "▲" : "▼"}
 								</span>
 							</button>
 						))}
 					</span>
 					{/* Single wrapper — avoids multiplying grid gap by strat count */}
 					<div style={{ gridColumn: "1 / -1" }}>
-						{strats.map((s) => (
-							<div key={s.id} className={"collapsible" + (openStratId === s.id ? " collapsible--open" : "")}>
-								<div className="collapsible-inner auth-strat-inline">
-									<div className="auth-strat-inline-label">{s.label}</div>
-									{s.items.map((item, i) => (
-										<div className="gw-row-item" key={i}>
-											<span className="gw-row-dot">·</span>
-											<span className="constraint-text"><RefText value={item} /></span>
-										</div>
-									))}
-								</div>
+						{openStrat && (
+							<div key={openStrat.id} className="schema-panel schema-panel--animate">
+								<div className="schema-panel-label">{openStrat.label}</div>
+								{openStrat.items.map((item, i) => (
+									<div className="gw-row-item" key={i}>
+										<span className="gw-row-dot">·</span>
+										<span className="constraint-text"><RefText value={item} /></span>
+									</div>
+								))}
 							</div>
-						))}
+						)}
 					</div>
 				</>
+			) : (
+				// No auth strategy on this endpoint — flag it explicitly rather
+				// than just omitting the row, so a frontend dev skimming the
+				// card knows this is deliberate and doesn't send a stale/leftover
+				// Authorization header (harmless to the server here, but a sign
+				// something upstream is misconfigured, e.g. a shared HTTP client
+				// attaching auth to every request by default).
+				<span className="meta-value meta-value--auth">
+					<span className="auth-none-note">No auth — don't send an Authorization header</span>
+				</span>
 			)}
 			{roleInfo && (
 				<>
@@ -298,8 +342,6 @@ function ConstraintSection({
 		collapseMatching(belongsToUsedBy);
 	}
 
-	const usedByHotkeyNumber = useCollapseHotkey(usedByOpen, () => toggleOpenState(usedByKey));
-
 	const rows =
 	[
 		...CONSTRAINT_CONFIG.filter(({ key, skip }) => !skip(constraints[key])).map(
@@ -328,7 +370,7 @@ function ConstraintSection({
 						onClick={() => toggleOpenState(usedByKey)}
 					>
 						Used by pages ({pages.length})
-						<CollapseToggle collapsed={!usedByOpen} hotkeyNumber={usedByHotkeyNumber} className="ep-toggle" />
+						<CollapseToggle collapsed={!usedByOpen} className="ep-toggle" />
 						<button
 							type="button"
 							className="group-hd-collapse-btn ep-section-collapse-btn"
@@ -386,8 +428,9 @@ function ConstraintSection({
 function ShapeFrame({ frame, shape, frameKey, isOpenState, toggleOpenState })
 {
 	const frameOpen = isOpenState(frameKey);
-	const ref = useMaskSpotlight(frameOpen, { border: false });
-	const hotkeyNumber = useCollapseHotkey(frameOpen, () => toggleOpenState(frameKey));
+	const spotlightRef = useMaskSpotlight(frameOpen, { border: false });
+	const [ref, nodeRef] = useMergedRef(spotlightRef);
+	const hotkeyNumber = useCollapseHotkey(frameOpen, () => toggleOpenState(frameKey), nodeRef);
 	const isCookieShape = shape !== null && typeof shape === "object" && ("body" in shape || "cookies" in shape || "clears" in shape);
 	return (
 		<div ref={ref} className="shape-frame spot">
@@ -443,8 +486,9 @@ function PayloadSection({
 })
 {
 	const open = isOpenState(openKey);
-	const ref = useMaskSpotlight(open, { border: false });
-	const hotkeyNumber = useCollapseHotkey(open, () => toggleOpenState(openKey));
+	const spotlightRef = useMaskSpotlight(open, { border: false });
+	const [ref, nodeRef] = useMergedRef(spotlightRef);
+	const hotkeyNumber = useCollapseHotkey(open, () => toggleOpenState(openKey), nodeRef);
 	const isMultiFrame = typeof value !== "string";
 	const frameCount = isMultiFrame ? Object.keys(value).length : 1;
 
@@ -556,11 +600,15 @@ function EndpointCard({
 	// PageCard's "Endpoints used" list (see PageCard below) rather than
 	// shown at the top level of the Endpoints view — and that list item
 	// shouldn't draw its own top/bottom border on top of the page card's.
+	// It also gates the stack/team meta-line and the Tables row: that
+	// detail is redundant/noisy when you're just skimming which endpoints
+	// a page uses, so it's only shown on the top-level Endpoints view.
 	// border: true when collapsed (hover spotlight + border lines), false when
 	// expanded (avoids drawing a second border on top of the open page card's
 	// own border when this card is nested inside a PageCard's Endpoints list).
-	const ref = useMaskSpotlight(expanded, { border: !expanded });
-	const hotkeyNumber = useCollapseHotkey(expanded, () => toggleOpenState(openKey));
+	const spotlightRef = useMaskSpotlight(expanded, { border: !expanded });
+	const [ref, nodeRef] = useMergedRef(spotlightRef);
+	const hotkeyNumber = useCollapseHotkey(expanded, () => toggleOpenState(openKey), nodeRef);
 
 	// "Collapse attributes" wipes every open registry key that is a child of
 	// this card (payload sections, used-by, nested page cards) without closing
@@ -614,16 +662,20 @@ function EndpointCard({
 			</div>
 			<div className={"collapsible" + (expanded ? " collapsible--open" : "")}>
 				<div className="collapsible-inner ep-body">
-					<div className="ep-card-meta-line">
-						<span className="ep-card-meta-service">{ep.service}</span>
-						<span className="ep-card-meta-dot">·</span>
-						<span className={"ep-card-meta-owner role--" + ep.owner.toLowerCase().replace(/\s+/g, "-")}>
-							{ep.owner}
-						</span>
-					</div>
+					{showUsedBy && (
+						<div className="ep-card-meta-line">
+							<span className="ep-card-meta-service">{ep.service}</span>
+							<span className="ep-card-meta-dot">·</span>
+							<span className={"ep-card-meta-owner role--" + ep.owner.toLowerCase().replace(/\s+/g, "-")}>
+								{ep.owner}
+							</span>
+						</div>
+					)}
 					<div className="ep-meta-grid">
-						<TablesRow ep={ep} openKey={openKey} isOpenState={isOpenState} toggleOpenState={toggleOpenState} collapseMatching={collapseMatching} />
-						<AccessRow ep={ep} openKey={openKey} isOpenState={isOpenState} toggleOpenState={toggleOpenState} />
+						{showUsedBy && (
+							<TablesRow ep={ep} openKey={openKey} isOpenState={isOpenState} toggleOpenState={toggleOpenState} collapseMatching={collapseMatching} />
+						)}
+						<AccessRow ep={ep} openKey={openKey} isOpenState={isOpenState} toggleOpenState={toggleOpenState} collapseMatching={collapseMatching} hideApiKey={!showUsedBy} />
 					</div>
 					{ep.method === "WS"
 						? ep.request && (
@@ -727,8 +779,9 @@ function PageCard({
 	// used-by-section) rather than shown at the top level of the Pages
 	// view — and that list item shouldn't draw its own top/bottom border
 	// on top of the used-by section's.
-	const ref = useMaskSpotlight(isOpen, { border: !excludeEpId });
-	const hotkeyNumber = useCollapseHotkey(isOpen, onToggle);
+	const spotlightRef = useMaskSpotlight(isOpen, { border: !excludeEpId });
+	const [ref, nodeRef] = useMergedRef(spotlightRef);
+	const hotkeyNumber = useCollapseHotkey(isOpen, onToggle, nodeRef);
 
 	const epsPrefix = keyPrefix + ":ep:";
 	const belongsToEps = (key) => key.startsWith(epsPrefix);

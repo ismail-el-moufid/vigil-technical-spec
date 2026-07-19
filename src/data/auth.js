@@ -61,8 +61,9 @@ export const AUTH_ENDPOINTS =
 			[
 				"Hashed/salted passwords",
 				"Frontend + backend validation",
+				"400 returned if email is missing or not a string, or password is missing or not a string",
 				{
-					text: "400 returned if email is missing or not a string, or password is missing or not a string — this endpoint does not apply the create endpoint's well-formed-address format rule to email, only a presence/type check: the account being created here always has a fresh, empty users table, so there's no uniqueness collision to protect against and format-checking is left to the frontend for this one-time bootstrap flow",
+					text: "This endpoint does not apply a well-formed-address format rule to email; it only checks presence and type because the account being created here always has a fresh, empty users table, so there's no uniqueness collision to protect against and format-checking is left to the frontend for this one-time bootstrap flow",
 					refs: ["ep-users-create"],
 				},
 				"Server checks for an existing row in users before insert — if any user already exists, returns 409 rather than creating a second admin. This is the actual enforcement behind the 'shown only before any user exists' rule described on the Setup page; the frontend route guard is a UX convenience on top of it, not the source of truth",
@@ -99,6 +100,7 @@ export const AUTH_ENDPOINTS =
 				body: "{ role: admin | viewer, access_token }",
 				cookies: [REFRESH_TOKEN_COOKIE]
 			},
+			400: "{ error: '<validation message>' }",
 			401: "{ error: 'unauthorized' }",
 			429: "{ error: 'rate limited' }",
 			500: "{ error: 'server error' }",
@@ -191,7 +193,7 @@ export const AUTH_ENDPOINTS =
 			criteria: [],
 			security:
 			[
-				"Sets revoked = true on the presented token's row — server-side invalidation, not just cookie clearing",
+				"Sets revoked = true on the presented session's sessions row and the matching refresh_tokens row — server-side invalidation, not just cookie clearing",
 			],
 			rateLimit: "10 req/min",
 			realtime: "None",

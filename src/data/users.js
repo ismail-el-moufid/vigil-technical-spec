@@ -18,7 +18,10 @@ export const USERS_ENDPOINTS =
 		tables: ["users"],
 		tables_actions: { users: "Read" },
 		constraints: {
-			criteria: ["User Management Major (2pt)"],
+			criteria:
+			[
+				"Unpaginated by design, unlike the telemetry/alerts list endpoints: this is an admin-managed directory of provisioned accounts, not a continuously-inserted table, so it's expected to stay small enough that a bare array with no page size, offset, or hasMore is an accepted scope decision rather than an oversight",
+			],
 			security: [],
 			rateLimit: "10 req/min",
 			realtime: "None",
@@ -71,7 +74,6 @@ export const USERS_ENDPOINTS =
 		tables_actions: { users: "Insert" },
 		constraints: {
 			criteria: [
-				"User Management Major (2pt)",
 				{
 					text: "400 returned if email isn't a well-formed address (local-part@domain, no whitespace, standard RFC 5322-subset check) — validated before the uniqueness lookup below, same 'checked before insert' pattern used throughout this spec. This is the only endpoint that defines the rule; the update and self-update endpoints reuse it verbatim since they write the same column. The setup endpoint's email field is validated for presence/type only, not this format rule",
 					refs: ["ep-users-update", "ep-users-me", "ep-auth-setup"],
@@ -110,8 +112,7 @@ export const USERS_ENDPOINTS =
 				"Identity resolved from the SecurityContext principal (JWT) — no path param, always the caller's own row",
 				"Closes the gap left by login/setup only returning { role, access_token }: this is the documented way the frontend gets its own id/email (e.g. to pre-fill the change-email form behind PATCH /api/users/me), rather than decoding the opaque access token client-side",
 				{
-					text: "Read grant is ADMIN_/_VIEWER here vs. ADMIN-only on the users list endpoint (GET /api/users) — confirmed intentional, not over-scoped: this endpoint only ever returns the caller's own row (see above), so it carries none of the full-directory disclosure that endpoint's ADMIN gate exists to prevent; same reasoning pattern used elsewhere for ADMIN_/_VIEWER grants on otherwise-sensitive tables",
-					refs: ["ep-users-list"],
+					text: "Read grant is ADMIN_/_VIEWER here vs. ADMIN-only on the full-directory users list endpoint — confirmed intentional, not over-scoped: this endpoint only ever returns the caller's own row (see above), so it carries none of the full-directory disclosure that endpoint's ADMIN gate exists to prevent; same reasoning pattern used elsewhere for ADMIN_/_VIEWER grants on otherwise-sensitive tables",
 				},
 			],
 			security: [],

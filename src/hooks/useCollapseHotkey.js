@@ -27,7 +27,21 @@ let nextId = 0;
 // Call unconditionally, every render. Returns a number (1-9) to display as a
 // hotkey badge, or null when closed, 10th+ open item this render, or there's
 // no enclosing HotkeyScope.
-export function useCollapseHotkey(isOpen, onCollapse)
+//
+// nodeRef (optional): a ref already attached to this collapsible's own
+// wrapper element (every current call site already has one, from
+// useMaskSpotlight/useBorderSpotlight). Passing it lets HotkeyScope number
+// currently-open items by where they actually sit in the document right now,
+// rather than by the fixed order in which each instance first mounted. Those
+// two orders can diverge: several collapsibles in this codebase lazily mount
+// their contents only the first time they're opened (see GroupSection's
+// `hasOpened`), so an item opened for the first time always gets the
+// highest id so far, even when it visually sits between two things that are
+// already open and numbered. Sorting by id in that case puts the newly
+// opened item last (e.g. 1, 3, 2 top-to-bottom) instead of where it visually
+// sits (1, 2, 3). A nodeRef fixes that; without one, HotkeyScope falls back
+// to the old id-order behavior.
+export function useCollapseHotkey(isOpen, onCollapse, nodeRef)
 {
 	const api = useContext(HotkeyApiContext);
 	const numberOf = useContext(HotkeyNumberContext);
@@ -46,7 +60,7 @@ export function useCollapseHotkey(isOpen, onCollapse)
 	useLayoutEffect(() =>
 	{
 		if (!api) return;
-		api.mount(id, isOpen, stableCollapse);
+		api.mount(id, isOpen, stableCollapse, nodeRef?.current ?? null);
 		return () => api.unmount(id);
 		// isOpen/stableCollapse intentionally excluded: this effect only
 		// handles this instance's mount/unmount; the effect below handles
@@ -57,7 +71,14 @@ export function useCollapseHotkey(isOpen, onCollapse)
 	useLayoutEffect(() =>
 	{
 		if (!api) return;
-		api.update(id, isOpen, stableCollapse);
+		api.update(id, isOpen, stableCollapse, nodeRef?.current ?? null);
+		// nodeRef intentionally excluded: reading nodeRef.current in the dep
+		// array itself (rather than inside the effect body) is a render-time
+		// ref read, which React disallows. The node is a DOM element that's
+		// attached once during commit and doesn't change identity afterward,
+		// so re-running this effect whenever isOpen changes is enough to
+		// pick it up.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [api, id, isOpen, stableCollapse]);
 
 	// No keyboard on phones (in general) to press Cmd/Ctrl+digit with, so

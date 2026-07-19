@@ -6,15 +6,25 @@ import { isPhone } from "../utils/device.js";
  * Per-collapsible numbered hotkeys.
  *
  * Wrap a view's content in <HotkeyScope>, then have any collapsible call
- * useCollapseHotkey(isOpen, onCollapse) unconditionally on every render. Each
- * collapsible claims a stable slot the first time it mounts, in mount order —
- * which matches visual top-to-bottom order for this codebase's layouts, and
- * stays fixed for that instance's lifetime even as it opens and closes later.
- * Currently-open collapsibles are renumbered 1-9 by slot order and get back a
- * number to show as a small badge; pressing Cmd/Ctrl + that digit collapses
- * whichever item currently holds that number, wherever it lives in the tree.
- * Plain digit presses are left alone (they're needed for typing in inputs and
- * don't collide with anything else in the app).
+ * useCollapseHotkey(isOpen, onCollapse, nodeRef) unconditionally on every
+ * render, passing a ref already attached to its own wrapper element.
+ * Currently-open collapsibles are renumbered 1-9 by where they actually sit
+ * in the document right now (top to bottom) and get back a number to show
+ * as a small badge; pressing Cmd/Ctrl + that digit collapses whichever item
+ * currently holds that number, wherever it lives in the tree. Plain digit
+ * presses are left alone (they're needed for typing in inputs and don't
+ * collide with anything else in the app).
+ *
+ * Ordering is by live DOM position, not by first-mount order. The two can
+ * diverge: several collapsibles in this codebase lazily mount their contents
+ * only the first time they're opened (see GroupSection's `hasOpened`), so an
+ * item opened for the first time gets the highest mount-order id so far even
+ * when it visually sits between two things that are already open. Sorting by
+ * that id would put it last (1, 3, 2 top-to-bottom) instead of where it
+ * visually sits (1, 2, 3) — which is the ordering a person actually expects
+ * when they open something between two badges they can already see. A
+ * collapsible that didn't pass a nodeRef (or hasn't attached it yet) falls
+ * back to id order against anything else lacking a comparable node.
  *
  * Registration lives entirely in effects and state, never in a ref mutated
  * during render. An earlier version reset a shared ref to [] at the top of
@@ -28,9 +38,9 @@ import { isPhone } from "../utils/device.js";
  * functions in development to surface exactly this kind of impure side
  * effect — every open collapsible was registering itself twice.
  *
- * Only the first 9 currently-open collapsibles (by slot order) get a number
- * (there are only 9 digit keys) — anything past that just renders without a
- * badge, same as being outside a HotkeyScope entirely.
+ * Only the first 9 currently-open collapsibles (by document order) get a
+ * number (there are only 9 digit keys) — anything past that just renders
+ * without a badge, same as being outside a HotkeyScope entirely.
  *
  * The hook itself (useCollapseHotkey) and the contexts it reads live in
  * ./useCollapseHotkey.js, not here — this file exports only the component so
@@ -38,17 +48,17 @@ import { isPhone } from "../utils/device.js";
  */
 export function HotkeyScope({ children })
 {
-	// id -> { isOpen, collapse }
+	// id -> { isOpen, collapse, node }
 	const [entries, setEntries] = useState(() => new Map());
 
 	const api = useMemo(() => (
 		{
-			mount(id, isOpen, collapse)
+			mount(id, isOpen, collapse, node = null)
 			{
 				setEntries(prev =>
 				{
 					const next = new Map(prev);
-					next.set(id, { isOpen, collapse });
+					next.set(id, { isOpen, collapse, node });
 					return next;
 				});
 			},
@@ -62,27 +72,38 @@ export function HotkeyScope({ children })
 					return next;
 				});
 			},
-			update(id, isOpen, collapse)
+			update(id, isOpen, collapse, node = null)
 			{
 				setEntries(prev =>
 				{
 					const current = prev.get(id);
 					if (!current) return prev;
-					if (current.isOpen === isOpen && current.collapse === collapse) return prev;
+					if (current.isOpen === isOpen && current.collapse === collapse && current.node === node) return prev;
 					const next = new Map(prev);
-					next.set(id, { isOpen, collapse });
+					next.set(id, { isOpen, collapse, node });
 					return next;
 				});
 			},
 
 		}), []);
 
-	// Currently-open ids in slot order (lower id mounted earlier).
+	// Currently-open ids in document order (falling back to mount-order id
+	// when either side is missing a node, or they're literally the same
+	// node — compareDocumentPosition has no ordering answer for that).
 	const numberedIds = useMemo(() =>
 	{
 		return [...entries.keys()]
 			.filter(id => entries.get(id).isOpen)
-			.sort((a, b) => a - b)
+			.sort((a, b) =>
+			{
+				const na = entries.get(a).node;
+				const nb = entries.get(b).node;
+				if (!na || !nb || na === nb) return a - b;
+				const rel = na.compareDocumentPosition(nb);
+				if (rel & Node.DOCUMENT_POSITION_FOLLOWING) return -1;
+				if (rel & Node.DOCUMENT_POSITION_PRECEDING) return 1;
+				return a - b;
+			})
 			.slice(0, 9);
 	}, [entries]);
 

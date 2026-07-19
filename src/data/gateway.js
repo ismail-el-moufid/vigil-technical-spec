@@ -39,8 +39,7 @@ export const AUTH_STRATEGIES =
 		items:
 		[
 			"Program-level lifetime",
-			"vigil.api-key: sourced from the same @ConfigurationProperties bean, auto-generated as a UUID via @PostConstruct at startup and held in memory only if left unset. Accepted dev-mode default, not a production design: a restart silently rotates it, breaking any external API client holding the old value with no warning, and a multi-instance deployment mints a different key per instance unless the property is set explicitly and identically everywhere. Production deployment requires setting vigil.api-key explicitly",
-			"vigil.ingestion-key: generated the same way, but also written to a file on a volume shared with the OTel Collector process rather than kept in memory only. The collector's own bearertokenauth extension reads that file directly (filename config, applied as the auth.authenticator on its receiver) to validate incoming service pushes, so a rotated value reaches the collector automatically — it doesn't have the restart-breaks-external-caller risk vigil.api-key has",
+			"vigil.api-key: sourced from the same @ConfigurationProperties bean, auto-generated as a UUID via @PostConstruct at startup and held in memory only if left unset — this auto-generated, in-memory-only behavior is the intended design as-is, not a dev-mode default awaiting a production override. Accepted tradeoff of that design: a restart silently rotates it, breaking any external API client holding the old value with no warning, and a multi-instance deployment mints a different key per instance since nothing pins it identically everywhere",
 			"Not tied to a users row, so it has no role of its own — treated as ADMIN-equivalent on every endpoint that accepts it, including ADMIN-only ones. It is an operator/service credential (used by external API clients, etc.), not a per-person credential — anyone holding it has full API access regardless of the endpoint's requiredRole",
 		],
 	},
@@ -190,7 +189,7 @@ export const RATE_LIMITING_INFO =
 		items:
 		[
 			"/internal/ingest/** — internal port, network-isolated; no HTTP rate limiting applies",
-			"/internal/llm/forward — same internal port, same network isolation; no HTTP rate limiting applies",
+			"The internal LLM-forwarding route — same internal port, same network isolation; no HTTP rate limiting applies",
 		],
 	},
 	{
@@ -201,7 +200,7 @@ export const RATE_LIMITING_INFO =
 		[
 			"The HTTP GET opening the stream consumes one token at connection time",
 			"Server-push frames over the established stream are not rate-limited",
-			"/api/alerts/ws upgrade — single long-lived connection per client; the upgrade GET counts once against the DEFAULT bucket, subsequent frames do not",
+			"The alerts WebSocket upgrade — single long-lived connection per client; the upgrade GET counts once against the DEFAULT bucket, subsequent frames do not",
 		],
 	},
 ];
@@ -223,6 +222,10 @@ export const ROLE_ENFORCEMENT_INFO =
 				"GET /api/config/keys · POST /api/users · GET /api/users",
 				"PATCH /api/users/{id} · DELETE /api/users/{id} (both 409 if the action would leave zero admins)",
 				"GET + POST + DELETE /api/webhooks",
+				{
+					text: "POST /api/alerts/rules · PATCH /api/alerts/rules/{id} · DELETE /api/alerts/rules/{id}",
+					refs: ["ep-alert-rules-create", "ep-alert-rules-update", "ep-alert-rules-delete"],
+				},
 			],
 		},
 		{
@@ -233,6 +236,14 @@ export const ROLE_ENFORCEMENT_INFO =
 			[
 				"All telemetry reads · GET + PATCH /api/users/me",
 				"POST /api/llm/analyze · all SSE streams",
+				{
+					text: "GET /api/alerts · GET /api/alerts/rules · PUT /api/alerts/{id}",
+					refs: ["ep-alerts-list", "ep-alert-rules-list", "ep-alert-ack"],
+				},
+				{
+					text: "WS alerts stream — a WebSocket, not an SSE stream; grouped here rather than under \"all SSE streams\" above since it isn't one",
+					refs: ["ep-alerts-ws"],
+				},
 			],
 		},
 		{

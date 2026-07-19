@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from "react";
 import useBorderSpotlight from "../hooks/useBorderSpotlight.js";
+import useMergedRef from "../hooks/useMergedRef.js";
 import { useCollapseHotkey } from "../hooks/useCollapseHotkey";
 import groupBy from "../utils/groupBy.js";
 import GroupHeader from "./ui/GroupHeader.jsx";
@@ -24,7 +25,8 @@ export default function MetaGroupSection({
 	highlightId,
 })
 {
-	const ref = useBorderSpotlight(!isOpen);
+	const spotlightRef = useBorderSpotlight(!isOpen);
+	const [ref, nodeRef] = useMergedRef(spotlightRef);
 	const subGroups = groupBy(eps);
 
 	// A key belongs to this meta group if it contains any endpoint id from eps.
@@ -69,7 +71,7 @@ export default function MetaGroupSection({
 		handleCollapseAll();
 		onToggle();
 	}
-	const hotkeyNumber = useCollapseHotkey(isOpen, handleHotkeyCollapse);
+	const hotkeyNumber = useCollapseHotkey(isOpen, handleHotkeyCollapse, nodeRef);
 
 	// Whitelist: legend (header), the wrapper's own padding, or the bare
 	// fieldset (border) only — see GroupSection.jsx for why a blacklist on
