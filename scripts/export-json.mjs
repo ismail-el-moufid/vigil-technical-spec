@@ -1,6 +1,7 @@
 // Imports the data barrel from src/data/index.js and writes pages and schema
-// as standalone JSON files, plus a grouped endpoints.json, a combined
-// Security.json for everything else, and a combined Full Spec.json. Run with
+// as standalone JSON files, plus a grouped Endpoints.json (all groups
+// combined), one standalone file per individual endpoint group, a combined
+// Security.json for everything else, and a combined FullSpec.json. Run with
 // plain Node (package.json has "type": "module", and src/data has zero
 // external dependencies, so no npm install is required first).
 //
@@ -29,12 +30,22 @@ function humanize(key) {
         .join(" ");
 }
 
+// SOME_GROUP -> "SomeGroup" (PascalCase, no separators, for filenames)
+function pascalCase(key) {
+    return key
+        .toLowerCase()
+        .split("_")
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join("");
+}
+
 const ENDPOINTS_SUFFIX = "_ENDPOINTS";
 const RESERVED_KEYS = new Set(["ENDPOINTS", "PAGES", "SCHEMA"]);
 const debug = process.env.DEBUG_EXPORT === "1";
 
 const endpoints = {};
 const security = {};
+const endpointFiles = []; // { groupName, fileName } for logging + release body reference
 
 for (const [key, value] of Object.entries(data)) {
     if (RESERVED_KEYS.has(key)) {
@@ -43,9 +54,15 @@ for (const [key, value] of Object.entries(data)) {
     }
 
     if (key.endsWith(ENDPOINTS_SUFFIX)) {
-        const groupName = humanize(key.slice(0, -ENDPOINTS_SUFFIX.length));
+        const rawGroup = key.slice(0, -ENDPOINTS_SUFFIX.length);
+        const groupName = humanize(rawGroup);
         endpoints[groupName] = value;
-        if (debug) console.log(`[endpoints] ${key} -> "${groupName}"`);
+
+        const fileName = `${pascalCase(rawGroup)}Endpoints.json`;
+        writeFileSync(join(outDir, fileName), JSON.stringify(value, null, 2));
+        endpointFiles.push({ groupName, fileName });
+
+        if (debug) console.log(`[endpoints] ${key} -> "${groupName}" (${fileName})`);
     } else {
         const groupName = humanize(key);
         security[groupName] = value;
@@ -53,18 +70,21 @@ for (const [key, value] of Object.entries(data)) {
     }
 }
 
-writeFileSync(join(outDir, "endpoints.json"), JSON.stringify(endpoints, null, 2));
-writeFileSync(join(outDir, "pages.json"), JSON.stringify(data.PAGES, null, 2));
-writeFileSync(join(outDir, "schema.json"), JSON.stringify(data.SCHEMA, null, 2));
+writeFileSync(join(outDir, "Endpoints.json"), JSON.stringify(endpoints, null, 2));
+writeFileSync(join(outDir, "Pages.json"), JSON.stringify(data.PAGES, null, 2));
+writeFileSync(join(outDir, "Schema.json"), JSON.stringify(data.SCHEMA, null, 2));
 
 const spec = {
     Endpoints: Object.entries(endpoints).map(([name, value]) => ({ [name]: value })),
     Security: security,
-    PAGES: data.PAGES,
-    SCHEMA: data.SCHEMA,
+    Pages: data.PAGES,
+    Schema: data.SCHEMA,
 };
 
 writeFileSync(join(outDir, "Security.json"), JSON.stringify(security, null, 2));
-writeFileSync(join(outDir, "Full Spec.json"), JSON.stringify(spec, null, 2));
+writeFileSync(join(outDir, "FullSpec.json"), JSON.stringify(spec, null, 2));
 
-console.log(`Wrote pages.json, endpoints.json, schema.json, Security.json, and Full Spec.json to ${outDir}/`);
+const endpointFileList = endpointFiles.map((e) => e.fileName).join(", ");
+console.log(
+    `Wrote Endpoints.json, Pages.json, Schema.json, Security.json, FullSpec.json, and per-group files (${endpointFileList}) to ${outDir}/`
+);
