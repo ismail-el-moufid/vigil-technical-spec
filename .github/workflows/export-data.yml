@@ -50,7 +50,7 @@ jobs:
             | [`FullSpec.json`](https://github.com/ismail-el-moufid/vigil-technical-spec/releases/download/spec-as-json/FullSpec.json) | Everything above combined into one file |
 
             <details>
-            <summary>📂 <b>Just need one endpoint group?</b> Grab it standalone instead of the whole <code>Endpoints.json</code></summary>
+            <summary><b>Just need one endpoint group?</b> Grab it standalone instead of the whole <code>Endpoints.json</code></summary>
 
             | Group | File |
             |---|---|
