@@ -1,6 +1,6 @@
 // Imports the data barrel from src/data/index.js and writes pages and schema
 // as standalone JSON files, plus a grouped endpoints.json, a combined
-// Security.json for everything else, and a full Spec.json. Run with plain Node
+// Security.json for everything else, and a full Full Spec.json. Run with plain Node
 // (package.json has "type": "module", and src/data has zero external
 // dependencies, so no npm install is required first).
 //
@@ -65,6 +65,6 @@ const spec = {
 };
 
 writeFileSync(join(outDir, "Security.json"), JSON.stringify(security, null, 2));
-writeFileSync(join(outDir, "Spec.json"), JSON.stringify(spec, null, 2));
+writeFileSync(join(outDir, "Full Spec.json"), JSON.stringify(spec, null, 2));
 
-console.log(`Wrote pages.json, endpoints.json, schema.json, Security.json, and Spec.json to ${outDir}/`);
+console.log(`Wrote pages.json, endpoints.json, schema.json, Security.json, and Full Spec.json to ${outDir}/`);
