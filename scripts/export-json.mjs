@@ -1,9 +1,11 @@
 // Imports the data barrel from src/data/index.js and writes pages and schema
 // as standalone JSON files, plus a grouped Endpoints.json (all groups
 // combined), one standalone file per individual endpoint group, a combined
-// Security.json for everything else, and a combined FullSpec.json. Run with
-// plain Node (package.json has "type": "module", and src/data has zero
-// external dependencies, so no npm install is required first).
+// Security.json for everything else, a combined Backend.json (endpoints +
+// schema + security), a combined Frontend.json (pages + endpoints), and a
+// combined FullSpec.json. Run with plain Node (package.json has "type":
+// "module", and src/data has zero external dependencies, so no npm install
+// is required first).
 //
 //   node scripts/export-json.mjs [outDir]
 //   DEBUG_EXPORT=1 node scripts/export-json.mjs   # to see how each export was classified
@@ -70,21 +72,41 @@ for (const [key, value] of Object.entries(data)) {
     }
 }
 
+// Shared shape: FullSpec.json's "Endpoints" field is an array of single-key
+// objects (one per group) rather than one flat object, so Backend.json and
+// Frontend.json reuse the same array for consistency with FullSpec.json —
+// anything already parsing FullSpec.json's Endpoints field works unchanged
+// against these.
+const endpointsArray = Object.entries(endpoints).map(([name, value]) => ({ [name]: value }));
+
 writeFileSync(join(outDir, "Endpoints.json"), JSON.stringify(endpoints, null, 2));
 writeFileSync(join(outDir, "Pages.json"), JSON.stringify(data.PAGES, null, 2));
 writeFileSync(join(outDir, "Schema.json"), JSON.stringify(data.SCHEMA, null, 2));
 
 const spec = {
-    Endpoints: Object.entries(endpoints).map(([name, value]) => ({ [name]: value })),
+    Endpoints: endpointsArray,
     Security: security,
     Pages: data.PAGES,
     Schema: data.SCHEMA,
 };
 
+const backend = {
+    Endpoints: endpointsArray,
+    Schema: data.SCHEMA,
+    Security: security,
+};
+
+const frontend = {
+    Pages: data.PAGES,
+    Endpoints: endpointsArray,
+};
+
 writeFileSync(join(outDir, "Security.json"), JSON.stringify(security, null, 2));
+writeFileSync(join(outDir, "Backend.json"), JSON.stringify(backend, null, 2));
+writeFileSync(join(outDir, "Frontend.json"), JSON.stringify(frontend, null, 2));
 writeFileSync(join(outDir, "FullSpec.json"), JSON.stringify(spec, null, 2));
 
 const endpointFileList = endpointFiles.map((e) => e.fileName).join(", ");
 console.log(
-    `Wrote Endpoints.json, Pages.json, Schema.json, Security.json, FullSpec.json, and per-group files (${endpointFileList}) to ${outDir}/`
+    `Wrote Endpoints.json, Pages.json, Schema.json, Security.json, Backend.json, Frontend.json, FullSpec.json, and per-group files (${endpointFileList}) to ${outDir}/`
 );
