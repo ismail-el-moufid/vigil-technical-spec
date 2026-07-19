@@ -43,25 +43,25 @@ jobs:
 
             | File | What's in it |
             |---|---|
-            | [`Endpoints.json`](https://github.com/ismail-el-moufid/vigil-technical-spec/releases/download/spec-as-json/Endpoints.json) | All endpoint groups combined , see the breakdown below if you only need one group |
-            | [`Pages.json`](https://github.com/ismail-el-moufid/vigil-technical-spec/releases/download/spec-as-json/Pages.json) | Page definitions |
-            | [`Schema.json`](https://github.com/ismail-el-moufid/vigil-technical-spec/releases/download/spec-as-json/Schema.json) | Data schema |
-            | [`Security.json`](https://github.com/ismail-el-moufid/vigil-technical-spec/releases/download/spec-as-json/Security.json) | Everything else , auth strategies, filter chain, startup sequence, rate limiting, role enforcement |
-            | [`FullSpec.json`](https://github.com/ismail-el-moufid/vigil-technical-spec/releases/download/spec-as-json/FullSpec.json) | Everything above combined into one file |
+            | [Endpoints.json](https://github.com/ismail-el-moufid/vigil-technical-spec/releases/download/spec-as-json/Endpoints.json) | All endpoint groups combined , see the breakdown below if you only need one group |
+            | [Pages.json](https://github.com/ismail-el-moufid/vigil-technical-spec/releases/download/spec-as-json/Pages.json) | Page definitions |
+            | [Schema.json](https://github.com/ismail-el-moufid/vigil-technical-spec/releases/download/spec-as-json/Schema.json) | Data schema |
+            | [Security.json](https://github.com/ismail-el-moufid/vigil-technical-spec/releases/download/spec-as-json/Security.json) | Everything else , auth strategies, filter chain, startup sequence, rate limiting, role enforcement |
+            | [FullSpec.json](https://github.com/ismail-el-moufid/vigil-technical-spec/releases/download/spec-as-json/FullSpec.json) | Everything above combined into one file |
 
             <details>
             <summary><b>Just need one endpoint group?</b> Grab it standalone instead of the whole <code>Endpoints.json</code></summary>
 
             | Group | File |
             |---|---|
-            | Auth | [`AuthEndpoints.json`](https://github.com/ismail-el-moufid/vigil-technical-spec/releases/download/spec-as-json/AuthEndpoints.json) |
-            | Config | [`ConfigEndpoints.json`](https://github.com/ismail-el-moufid/vigil-technical-spec/releases/download/spec-as-json/ConfigEndpoints.json) |
-            | Telemetry | [`TelemetryEndpoints.json`](https://github.com/ismail-el-moufid/vigil-technical-spec/releases/download/spec-as-json/TelemetryEndpoints.json) |
-            | Alerts | [`AlertsEndpoints.json`](https://github.com/ismail-el-moufid/vigil-technical-spec/releases/download/spec-as-json/AlertsEndpoints.json) |
-            | Users | [`UsersEndpoints.json`](https://github.com/ismail-el-moufid/vigil-technical-spec/releases/download/spec-as-json/UsersEndpoints.json) |
-            | Webhooks | [`WebhooksEndpoints.json`](https://github.com/ismail-el-moufid/vigil-technical-spec/releases/download/spec-as-json/WebhooksEndpoints.json) |
-            | AI | [`AiEndpoints.json`](https://github.com/ismail-el-moufid/vigil-technical-spec/releases/download/spec-as-json/AiEndpoints.json) |
-            | Internal | [`InternalEndpoints.json`](https://github.com/ismail-el-moufid/vigil-technical-spec/releases/download/spec-as-json/InternalEndpoints.json) |
+            | Auth | [AuthEndpoints.json](https://github.com/ismail-el-moufid/vigil-technical-spec/releases/download/spec-as-json/AuthEndpoints.json) |
+            | Config | [ConfigEndpoints.json](https://github.com/ismail-el-moufid/vigil-technical-spec/releases/download/spec-as-json/ConfigEndpoints.json) |
+            | Telemetry | [TelemetryEndpoints.json](https://github.com/ismail-el-moufid/vigil-technical-spec/releases/download/spec-as-json/TelemetryEndpoints.json) |
+            | Alerts | [AlertsEndpoints.json](https://github.com/ismail-el-moufid/vigil-technical-spec/releases/download/spec-as-json/AlertsEndpoints.json) |
+            | Users | [UsersEndpoints.json](https://github.com/ismail-el-moufid/vigil-technical-spec/releases/download/spec-as-json/UsersEndpoints.json) |
+            | Webhooks | [WebhooksEndpoints.json](https://github.com/ismail-el-moufid/vigil-technical-spec/releases/download/spec-as-json/WebhooksEndpoints.json) |
+            | AI | [AiEndpoints.json](https://github.com/ismail-el-moufid/vigil-technical-spec/releases/download/spec-as-json/AiEndpoints.json) |
+            | Internal | [InternalEndpoints.json](https://github.com/ismail-el-moufid/vigil-technical-spec/releases/download/spec-as-json/InternalEndpoints.json) |
 
             </details>
 
