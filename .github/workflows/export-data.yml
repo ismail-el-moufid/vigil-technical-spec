@@ -43,9 +43,9 @@ jobs:
 
             | File | What's in it |
             |---|---|
-            | [FullSpec.json](https://github.com/ismail-el-moufid/vigil-technical-spec/releases/download/spec-as-json/FullSpec.json) | Everything above combined into one file |
-            | [Backend.json](https://github.com/ismail-el-moufid/vigil-technical-spec/releases/download/spec-as-json/Backend.json) | Endpoints + Schema + Security combined, everything a backend implementer needs, no page/UI content |
-            | [Frontend.json](https://github.com/ismail-el-moufid/vigil-technical-spec/releases/download/spec-as-json/Frontend.json) | Pages + Endpoints combined, everything a frontend implementer needs, no schema/security internals |
+            | [FullSpec.json](https://github.com/ismail-el-moufid/vigil-technical-spec/releases/download/spec-as-json/FullSpec.json) | Everything combined into one file |
+            | [Backend.json](https://github.com/ismail-el-moufid/vigil-technical-spec/releases/download/spec-as-json/Backend.json) | Endpoints, Schema, and Security combined, everything a backend implementer needs, no page content |
+            | [Frontend.json](https://github.com/ismail-el-moufid/vigil-technical-spec/releases/download/spec-as-json/Frontend.json) | Pages, Endpoints, and AuthStrategies/RoleEnforcement combined, everything a frontend implementer needs, no schema/security internals |
             | [Endpoints.json](https://github.com/ismail-el-moufid/vigil-technical-spec/releases/download/spec-as-json/Endpoints.json) | All endpoint groups combined, see the breakdown below if you only need one group |
             | [Pages.json](https://github.com/ismail-el-moufid/vigil-technical-spec/releases/download/spec-as-json/Pages.json) | Page definitions |
             | [Schema.json](https://github.com/ismail-el-moufid/vigil-technical-spec/releases/download/spec-as-json/Schema.json) | Data schema |

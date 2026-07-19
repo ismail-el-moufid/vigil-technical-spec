@@ -96,9 +96,19 @@ const backend = {
     Security: security,
 };
 
+// Frontend.json also needs enough of Security to make sense of each
+// endpoint's authStrategy/requiredRole tags — those are just short labels
+// (e.g. "JWT", "ADMIN_/_VIEWER") on every endpoint object; the actual
+// behavior (token lifetime, where it's stored, refresh flow, which routes
+// need ADMIN vs any authenticated caller) lives in AUTH_STRATEGIES and
+// ROLE_ENFORCEMENT_INFO. Pulled in by name rather than spreading all of
+// `security`, since Filter chain / Startup sequence / Rate limiting info
+// are backend/infra concerns the frontend doesn't implement against.
 const frontend = {
     Pages: data.PAGES,
     Endpoints: endpointsArray,
+    AuthStrategies: security["Auth strategies"],
+    RoleEnforcement: security["Role enforcement info"],
 };
 
 writeFileSync(join(outDir, "Security.json"), JSON.stringify(security, null, 2));
