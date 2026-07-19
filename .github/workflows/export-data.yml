@@ -43,11 +43,11 @@ jobs:
 
             | File | What's in it |
             |---|---|
+            | [FullSpec.json](https://github.com/ismail-el-moufid/vigil-technical-spec/releases/download/spec-as-json/FullSpec.json) | Everything above combined into one file |
             | [Endpoints.json](https://github.com/ismail-el-moufid/vigil-technical-spec/releases/download/spec-as-json/Endpoints.json) | All endpoint groups combined, see the breakdown below if you only need one group |
             | [Pages.json](https://github.com/ismail-el-moufid/vigil-technical-spec/releases/download/spec-as-json/Pages.json) | Page definitions |
             | [Schema.json](https://github.com/ismail-el-moufid/vigil-technical-spec/releases/download/spec-as-json/Schema.json) | Data schema |
             | [Security.json](https://github.com/ismail-el-moufid/vigil-technical-spec/releases/download/spec-as-json/Security.json) | Everything else, auth strategies, filter chain, startup sequence, rate limiting, role enforcement |
-            | [FullSpec.json](https://github.com/ismail-el-moufid/vigil-technical-spec/releases/download/spec-as-json/FullSpec.json) | Everything above combined into one file |
 
             <details>
             <summary><b>Just need one endpoint group?</b> Grab it standalone instead of the whole <code>Endpoints.json</code></summary>
