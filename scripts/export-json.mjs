@@ -1,8 +1,8 @@
 // Imports the data barrel from src/data/index.js and writes pages and schema
 // as standalone JSON files, plus a grouped endpoints.json, a combined
-// Security.json for everything else, and a full Full Spec.json. Run with plain Node
-// (package.json has "type": "module", and src/data has zero external
-// dependencies, so no npm install is required first).
+// Security.json for everything else, and a combined Full Spec.json. Run with
+// plain Node (package.json has "type": "module", and src/data has zero
+// external dependencies, so no npm install is required first).
 //
 //   node scripts/export-json.mjs [outDir]
 //   DEBUG_EXPORT=1 node scripts/export-json.mjs   # to see how each export was classified
