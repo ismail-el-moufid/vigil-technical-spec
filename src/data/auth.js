@@ -24,7 +24,43 @@ const REFRESH_TOKEN_COOKIE =
 export const AUTH_ENDPOINTS =
 [
 	{
-		route: "/api/auth/setup",
+		route: "/api/setup",
+		service: "Spring Boot · in-memory startup state",
+		owner: "Backend Lead",
+		method: "GET",
+		request:
+		{
+			query: [],
+			body: null,
+			cookies: null,
+		},
+		response:
+		{
+			200: "{ setup_required: true | false }",
+			429: "{ timestamp: '<iso8601>', status: 429, path: '/api/setup', error: { message: 'rate limited' } }",
+			500: "{ timestamp: '<iso8601>', status: 500, path: '/api/setup', error: { message: 'server error' } }",
+		},
+		group: "Setup",
+		tables: [],
+		tables_actions: {},
+		constraints: {
+			criteria: [
+				"At process startup, the backend performs one users existence query and caches setup_required in memory: true when users has no rows, otherwise false",
+				"GET /api/setup returns that cached setup_required value and does not hit PostgreSQL on the request path",
+				"After POST /api/setup successfully commits the first admin, the backend flips the cached value to false; on restart the one startup query rebuilds the value from users"
+			],
+			security: [],
+			rateLimit: "10 req/min",
+			realtime: "None",
+			fallback: "None",
+			dedup: "None",
+		},
+		authStrategy: ["PERMIT_ALL"],
+		requiredRole: "NO_AUTH",
+		id: "ep-setup-status",
+	},
+	{
+		route: "/api/setup",
 		service: "Spring Boot + PostgreSQL",
 		owner: "Backend Lead",
 		method: "POST",
@@ -44,15 +80,15 @@ export const AUTH_ENDPOINTS =
 				body: "{ role: 'admin', access_token }",
 				cookies: [REFRESH_TOKEN_COOKIE]
 			},
-			400: "{ error: '<validation message>' }",
-			409: "{ error: 'setup already completed' }",
-			429: "{ error: 'rate limited' }",
-			500: "{ error: 'server error' }",
+			400: "{ timestamp: '<iso8601>', status: 400, path: '/api/setup', error: { email: '<validation message>', password: '<validation message>' } }",
+			409: "{ timestamp: '<iso8601>', status: 409, path: '/api/setup', error: { message: 'setup already completed' } }",
+			429: "{ timestamp: '<iso8601>', status: 429, path: '/api/setup', error: { message: 'rate limited' } }",
+			500: "{ timestamp: '<iso8601>', status: 500, path: '/api/setup', error: { message: 'server error' } }",
 		},
-		group: "Auth",
+		group: "Setup",
 		tables: ["users", "sessions", "refresh_tokens"],
 		tables_actions: {
-			users: "Read + Insert",
+			users: "Insert",
 			sessions: "Insert",
 			refresh_tokens: "Insert"
 		},
@@ -61,13 +97,11 @@ export const AUTH_ENDPOINTS =
 			[
 				"Hashed/salted passwords",
 				"Frontend + backend validation",
-				"400 returned if email is missing or not a string, or password is missing or not a string",
-				{
-					text: "This endpoint does not apply a well-formed-address format rule to email; it only checks presence and type because the account being created here always has a fresh, empty users table, so there's no uniqueness collision to protect against and format-checking is left to the frontend for this one-time bootstrap flow",
-					refs: ["ep-users-create"],
-				},
-				"Server checks for an existing row in users before insert — if any user already exists, returns 409 rather than creating a second admin. This is the actual enforcement behind the 'shown only before any user exists' rule described on the Setup page; the frontend route guard is a UX convenience on top of it, not the source of truth",
-				"On the non-409 path: one users row is inserted for the new admin (the Read above is only the existence check, not a substitute for this insert) — tables_actions lists this as 'Read + Insert' for the users table specifically",
+				"400 returned if email is missing, not a string, or not a well-formed email address, or if password is missing, not a string, or does not meet the password-strength pattern",
+				"Validation failures use the contextual error envelope: timestamp, status, and path identify the failed request; error maps each invalid field to its specific validation message",
+				"Server checks the in-memory setup_required flag before creation — false returns 409 without a users-table existence read. First-admin creation is serialized in-process so only one concurrent setup request can proceed while the flag is true",
+				"On the non-409 path, one users row, session row, and refresh_tokens row are inserted; only after that transaction commits is setup_required flipped to false in memory",
+				"A restart reconstructs setup_required with the single boot-time users existence query, so the cached value is not treated as durable state",
 			],
 			security: [],
 			rateLimit: "10 req/min",
@@ -100,10 +134,10 @@ export const AUTH_ENDPOINTS =
 				body: "{ role: admin | viewer, access_token }",
 				cookies: [REFRESH_TOKEN_COOKIE]
 			},
-			400: "{ error: '<validation message>' }",
-			401: "{ error: 'unauthorized' }",
-			429: "{ error: 'rate limited' }",
-			500: "{ error: 'server error' }",
+			400: "{ timestamp: '<iso8601>', status: 400, path: '/api/auth/login', error: { email: '<validation message>', password: '<validation message>' } }",
+			401: "{ timestamp: '<iso8601>', status: 401, path: '/api/auth/login', error: { message: 'unauthorized' } }",
+			429: "{ timestamp: '<iso8601>', status: 429, path: '/api/auth/login', error: { message: 'rate limited' } }",
+			500: "{ timestamp: '<iso8601>', status: 500, path: '/api/auth/login', error: { message: 'server error' } }",
 		},
 		group: "Auth",
 		tables: ["users", "sessions", "refresh_tokens"],
@@ -113,7 +147,10 @@ export const AUTH_ENDPOINTS =
 			refresh_tokens: "Insert"
 		},
 		constraints: {
-			criteria: ["Frontend + backend validation"],
+			criteria: [
+			   "Frontend + backend validation",
+			   "400 returned if email is missing, not a string, or not a well-formed email address, or if password is missing or not a string. Email format is validated before the user lookup; invalid credentials return 401."
+			],
 			security: [],
 			rateLimit: "10 req/min",
 			realtime: "None",

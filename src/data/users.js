@@ -75,7 +75,7 @@ export const USERS_ENDPOINTS =
 		constraints: {
 			criteria: [
 				{
-					text: "400 returned if email isn't a well-formed address (local-part@domain, no whitespace, standard RFC 5322-subset check) — validated before the uniqueness lookup below, same 'checked before insert' pattern used throughout this spec. This is the only endpoint that defines the rule; the update and self-update endpoints reuse it verbatim since they write the same column. The setup endpoint's email field is validated for presence/type only, not this format rule",
+					text: "400 returned if email isn't a well-formed address (local-part@domain, no whitespace, standard RFC 5322-subset check) — validated before the uniqueness lookup below, same 'checked before insert' pattern used throughout this spec. The update and self-update endpoints reuse it verbatim since they write the same column; setup and login also apply an email-format validation before continuing.",
 					refs: ["ep-users-update", "ep-users-me", "ep-auth-setup"],
 				},
 				"409 returned if email collides with the existing unique constraint on users.email — checked before insert, not left as an unhandled DB constraint violation",

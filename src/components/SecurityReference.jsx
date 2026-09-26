@@ -8,6 +8,7 @@ import {
 } from "../data";
 import RefText from "./ui/RefText.jsx";
 import CollapseToggle from "./ui/CollapseToggle.jsx";
+import AuthFlowDiagram from "./AuthFlowDiagram.jsx";
 import { useCollapseHotkey } from "../hooks/useCollapseHotkey";
 
 const STRATEGY_LIST = Object.values(AUTH_STRATEGIES);
@@ -19,7 +20,17 @@ const STRATEGY_LIST = Object.values(AUTH_STRATEGIES);
  * RefText ref can jump to; rate/role rows are collapsed the same way but
  * aren't ref targets themselves.
  */
-function CollapsibleEntry({ id, tag, tagType, label, items, open, onToggle, highlighted, renderItem })
+function CollapsibleEntry({
+	id,
+	tag,
+	tagType,
+	label,
+	items,
+	open,
+	onToggle,
+	highlighted,
+	renderItem
+})
 {
 	return (
 		<div
@@ -65,8 +76,7 @@ export default function SecurityReference({ open, onToggle, activeStratId })
 	const collapsibleClass = `collapsible${open ? " collapsible--open" : ""}`;
 	const [openEntries, setOpenEntries] = useState(() => new Set());
 	const [highlighted, setHighlighted] = useState(null);
-	// Section-level collapse for the three reference groups below (Rate
-	// Limiting, Role Enforcement, Auth Strategy Catalog) — separate from
+	// Section-level collapse for the reference groups below — separate from
 	// openEntries, which tracks the individual rows *within* each group.
 	// Collapsed by default, same reasoning as the card itself: reference
 	// material that shouldn't compete for space on load.
@@ -122,13 +132,28 @@ export default function SecurityReference({ open, onToggle, activeStratId })
 
 	return (
 		<div className={"security-layer" + (open ? " security-layer--open" : "")} ref={ref}>
-			<div className="ep-card-header security-header" onClick={onToggle}>
+			<div
+				className="ep-card-header security-header"
+				role="button"
+				tabIndex={0}
+				aria-expanded={open}
+				aria-controls="security-reference-content"
+				onClick={onToggle}
+				onKeyDown={(event) =>
+				{
+					if (!event.repeat && (event.key === "Enter" || event.key === " "))
+					{
+						event.preventDefault();
+						onToggle();
+					}
+				}}
+			>
 				<span className="security-title">Security</span>
 				<span className="ep-route security-subtitle">Startup · Spring Security · Bucket4j</span>
 				<span className="security-expand-hint">{open ? "Collapse" : "Expand"}</span>
 				<CollapseToggle collapsed={!open} hotkeyNumber={hotkeyNumber} className="ep-toggle security-toggle" />
 			</div>
-			<div className={collapsibleClass}>
+			<div id="security-reference-content" className={collapsibleClass} inert={!open}>
 				<div className="collapsible-inner ep-body">
 					<div className="ep-meta-grid security-meta-grid">
 						<span className="meta-label">Startup</span>
@@ -147,6 +172,31 @@ export default function SecurityReference({ open, onToggle, activeStratId })
 								<span className="constraint-text">{n.label}: <RefText value={n.sub} /></span>
 							</div>
 						))}
+					</div>
+
+					<div
+						className="ep-section-head used-by-head"
+						role="button"
+						tabIndex={0}
+						aria-expanded={openSections.has("auth-flow")}
+						aria-controls="security-auth-flow"
+						onClick={() => toggleSection("auth-flow")}
+						onKeyDown={(event) =>
+						{
+							if (!event.repeat && (event.key === "Enter" || event.key === " "))
+							{
+								event.preventDefault();
+								toggleSection("auth-flow");
+							}
+						}}
+					>
+						Auth flow
+						<CollapseToggle collapsed={!openSections.has("auth-flow")} className="ep-toggle" />
+					</div>
+					<div id="security-auth-flow" className={"collapsible" + (openSections.has("auth-flow") ? " collapsible--open" : "")}>
+						<div className="collapsible-inner">
+							{openSections.has("auth-flow") && <AuthFlowDiagram />}
+						</div>
 					</div>
 
 					<div

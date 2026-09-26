@@ -13,7 +13,7 @@ export const PAGES =
 		desc: "First-boot admin account creation, shown only before any user exists. Enforcement lives server-side",
 		role: "Frontend Lead",
 		group: "Auth",
-		endpointIds: ["ep-auth-setup"],
+		endpointIds: ["ep-setup-status", "ep-auth-setup"],
 		id: "page-setup",
 	},
 	{
