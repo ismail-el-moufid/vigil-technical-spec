@@ -1,8 +1,8 @@
-// Imports the data barrel from src/data/index.js and writes pages and schema
+// Imports the data barrel from src/data/index.js and writes pages, schema, and architecture
 // as standalone JSON files, plus a grouped Endpoints.json (all groups
 // combined), one standalone file per individual endpoint group, a combined
 // Security.json for everything else, a combined Backend.json (endpoints +
-// schema + security), a combined Frontend.json (pages + endpoints), and a
+// schema + security + architecture), a combined Frontend.json (pages + endpoints), and a
 // combined FullSpec.json. Run with plain Node (package.json has "type":
 // "module", and src/data has zero external dependencies, so no npm install
 // is required first).
@@ -57,7 +57,7 @@ function pascalCase(key) {
 }
 
 const ENDPOINTS_SUFFIX = "_ENDPOINTS";
-const RESERVED_KEYS = new Set(["ENDPOINTS", "PAGES", "SCHEMA"]);
+const RESERVED_KEYS = new Set(["ENDPOINTS", "PAGES", "SCHEMA", "ARCHITECTURE_SECTIONS", "ARCHITECTURE_DELIVERY_DIAGRAM"]);
 const debug = process.env.DEBUG_EXPORT === "1";
 
 // ─── lastUpdated ────────────────────────────────────────────────────────
@@ -79,6 +79,7 @@ const SOURCE_FILES = {
     INTERNAL_ENDPOINTS: "internal.js",
     PAGES: "pages.js",
     SCHEMA: "schema.js",
+    ARCHITECTURE_SECTIONS: "architecture.js",
     AUTH_STRATEGIES: "gateway.js",
     FILTER_CHAIN: "gateway.js",
     STARTUP_SEQUENCE: "gateway.js",
@@ -93,7 +94,7 @@ function lastUpdated(fileName) {
     const filePath = join(DATA_DIR, fileName);
     let iso;
     try {
-        const out = execSync(`git log -1 --format=%cI -- "${filePath}"`, {
+        const out = execSync(`git --no-pager log -1 --format=%cI -- "${filePath}"`, {
             encoding: "utf8",
             cwd: DATA_DIR,
         }).trim();
@@ -177,6 +178,7 @@ for (const [key, value] of Object.entries(data)) {
 
 const stampedPages = stampArray(data.PAGES, SOURCE_FILES.PAGES);
 const stampedSchema = stampObject(data.SCHEMA, SOURCE_FILES.SCHEMA);
+const stampedArchitecture = stampArray(data.ARCHITECTURE_SECTIONS, SOURCE_FILES.ARCHITECTURE_SECTIONS);
 
 // Shared shape: FullSpec.json's "Endpoints" field is an array of single-key
 // objects (one per group) rather than one flat object, so Backend.json and
@@ -188,18 +190,21 @@ const endpointsArray = Object.entries(endpoints).map(([name, value]) => ({ [name
 writeFileSync(join(outDir, "Endpoints.json"), JSON.stringify(endpoints, null, 2));
 writeFileSync(join(outDir, "Pages.json"), JSON.stringify(stampedPages, null, 2));
 writeFileSync(join(outDir, "Schema.json"), JSON.stringify(stampedSchema, null, 2));
+writeFileSync(join(outDir, "Architecture.json"), JSON.stringify(stampedArchitecture, null, 2));
 
 const spec = {
     Endpoints: endpointsArray,
     Security: security,
     Pages: stampedPages,
     Schema: stampedSchema,
+    Architecture: stampedArchitecture,
 };
 
 const backend = {
     Endpoints: endpointsArray,
     Schema: stampedSchema,
     Security: security,
+    Architecture: stampedArchitecture,
 };
 
 // Frontend.json also needs enough of Security to make sense of each
@@ -237,5 +242,5 @@ writeFileSync(join(outDir, "FullSpec.json"), JSON.stringify(spec, null, 2));
 
 const endpointFileList = endpointFiles.map((e) => e.fileName).join(", ");
 console.log(
-    `Wrote Endpoints.json, Pages.json, Schema.json, Security.json, Backend.json, Frontend.json, FullSpec.json, and per-group files (${endpointFileList}) to ${outDir}/`
+    `Wrote Endpoints.json, Pages.json, Schema.json, Architecture.json, Security.json, Backend.json, Frontend.json, FullSpec.json, and per-group files (${endpointFileList}) to ${outDir}/`
 );

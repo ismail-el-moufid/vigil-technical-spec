@@ -4,11 +4,13 @@ import { ENDPOINTS, PAGES } from "./data";
 import { isPhone } from "./utils/device.js";
 import EndpointsView from "./views/EndpointsView.jsx";
 import PagesView from "./views/PagesView.jsx";
+import ArchitectureView from "./views/ArchitectureView.jsx";
+import { ARCHITECTURE_SECTIONS } from "./data/architecture.js";
 import CommandPalette from "./components/CommandPalette.jsx";
 import SecurityReference from "./components/SecurityReference.jsx";
 import { setRefNavHandler } from "./utils/refNav.js";
 
-const TABS = ["endpoints", "pages"];
+const TABS = ["endpoints", "pages", "architecture"];
 const isMac = /mac/i.test(navigator.platform);
 
 export default function App()
@@ -19,6 +21,7 @@ export default function App()
 	const [paletteOpen, setPaletteOpen] = useState(false);
 	const [activeEpId, setActiveEpId] = useState(null);
 	const [activePageId, setActivePageId] = useState(null);
+	const [activeSectionId, setActiveSectionId] = useState(null);
 	const [secOpen, setSecOpen] = useState(false);
 	const [activeStratId, setActiveStratId] = useState(null);
 
@@ -142,15 +145,17 @@ export default function App()
 		scheduleHideRef.current();
 	};
 
-	const navigateTo = (nextTab, epId = null, pageId = null) =>
+	const navigateTo = (nextTab, epId = null, pageId = null, sectionId = null) =>
 	{
 		if (nextTab !== tab) switchTab(nextTab);
 		setActiveEpId(epId);
 		setActivePageId(pageId);
+		setActiveSectionId(sectionId);
 		setTopbarHidden(false);
 		scheduleHideRef.current();
 		if (epId) setTimeout(() => setActiveEpId(null), 1200);
 		if (pageId) setTimeout(() => setActivePageId(null), 1200);
+		if (sectionId) setTimeout(() => setActiveSectionId(null), 1200);
 	};
 
 	// Route a RefText pill click: an endpoint id switches tabs and expands
@@ -187,7 +192,7 @@ export default function App()
 				setPaletteOpen((o) => !o);
 			}
 
-			// ⌥1 / ⌥2 — switch tabs (uses e.code so Alt+digit works on Mac too)
+			// ⌥1 / ⌥2 / ⌥3 — switch tabs (uses e.code so Alt+digit works on Mac too)
 			if (e.altKey && !e.ctrlKey && !e.metaKey)
 			{
 				if (e.code === "Digit1")
@@ -198,6 +203,10 @@ export default function App()
 				{
 					e.preventDefault(); switchTab("pages");
 				}
+				if (e.code === "Digit3")
+				{
+					e.preventDefault(); switchTab("architecture");
+				}
 			}
 		};
 		window.addEventListener("keydown", handler);
@@ -206,7 +215,7 @@ export default function App()
 	}, [tab]);
 
 	const isEps = tab === "endpoints";
-	const tabViewClass = `tab-view tab-view--${prevTab === "endpoints" ? "from-left" : "from-right"}`;
+	const tabViewClass = `tab-view tab-view--${TABS.indexOf(prevTab) < TABS.indexOf(tab) ? "from-left" : "from-right"}`;
 
 	return (
 		<div className="layout">
@@ -233,16 +242,17 @@ export default function App()
 					<span className="tagline">Technical Spec</span>
 				</div>
 
-				<nav className="topbar-tabs">
+				<nav className="topbar-tabs" aria-label="Spec sections">
 					{TABS.map((t, i) => (
 						<button
 							key={t}
+							aria-current={tab === t ? "page" : undefined}
 							className={"tab-btn" + (tab === t ? " active" : "")}
 							onClick={() => switchTab(t)}
 						>
 							{t.charAt(0).toUpperCase() + t.slice(1)}
 							<span className="tab-btn-count">
-								{t === "endpoints" ? ENDPOINTS.length : PAGES.length}
+								{t === "endpoints" ? ENDPOINTS.length : t === "pages" ? PAGES.length : ARCHITECTURE_SECTIONS.length}
 							</span>
 							{tab !== t && !isPhone && (
 								<kbd className="tab-btn-shortcut">{isMac ? "⌥" : "Alt+"}{i + 1}</kbd>
@@ -275,7 +285,9 @@ export default function App()
 				<div key={animKey} className={tabViewClass}>
 					{isEps
 						? <EndpointsView highlightId={activeEpId} />
-						: <PagesView highlightPageId={activePageId} highlightEndpointId={activeEpId} />
+						: tab === "pages"
+							? <PagesView highlightPageId={activePageId} highlightEndpointId={activeEpId} />
+							: <ArchitectureView highlightSectionId={activeSectionId} />
 					}
 				</div>
 			</div>

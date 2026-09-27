@@ -20,9 +20,10 @@ export const AUTH_STRATEGIES =
 		items:
 		[
 			"15-minute TTL — short-lived; frontend holds it in memory only — never written to a cookie or localStorage, so it can't be read by an XSS payload",
-			"Lost on hard refresh — this is the expected missing-token case; the boot guard calls /api/auth/refresh on every page load and falls back to /login or /setup on 401",
+			"Reuse an unexpired access token without checking session_hint. Whenever the access token is missing (including after a hard reload) or expired, check the hint: session_hint=1 means call POST /api/auth/refresh; no hint means skip refresh and use GET /api/setup to choose /login or /setup. This saves an unnecessary refresh request when logged out, not a request or database work when restoring a valid session. Accepted tradeoff: if the hint is independently deleted while the refresh cookie remains valid, the frontend skips session recovery and shows /login when setup is complete",
+			"session_hint is a JavaScript-readable cookie (value 1, Secure, SameSite=Strict, Path=/, Max-Age=30d), set and renewed alongside the HttpOnly refresh_token. It can be stale or edited and is never proof of login. A refresh 401 clears both cookies and sends the frontend through GET /api/setup; network failures, 429, and 5xx remain error/retry states without clearing cookies",
 			"AuthFilter validates signature and expiry only, then sets the SecurityContext principal — no DB hit on every request",
-			"On expiry the next API call returns 401; frontend calls /api/auth/refresh which validates the refresh_token cookie against the refresh_tokens table, rotates the row, and reissues a new access token and refresh cookie",
+			"If an API call returns 401 because the access token expired, the frontend applies the same hint check before attempting refresh. With session_hint=1, POST /api/auth/refresh validates the refresh_token cookie against the refresh_tokens table, rotates the row, reissues a new access token and refresh cookie, and renews session_hint with the refresh cookie's expiry. Without the hint, skip refresh and use GET /api/setup to choose /login or /setup",
 			"Claims in a live access token are explicitly designed to lag DB state until the next refresh — the tradeoff for no DB hit on every request. Scope of the re-check: 'admin endpoints' means every endpoint whose requiredRole is ADMIN, GET included, not writes only — a demoted admin's still-live token gets a 403 on their very next call to any ADMIN-tier route (e.g. GET /api/config/keys, GET /api/users), it just isn't caught until that next request happens, per the claims-lag tradeoff above. ADMIN_/_VIEWER-tier reads are not re-checked beyond signature/expiry, since any authenticated role already satisfies them",
 			{
 				text: "The same claims-lag tradeoff applies to account deletion, not just demotion: deleting a user cascades their sessions/refresh_tokens rows immediately (their next /api/auth/refresh fails), but does not and cannot revoke an access token already issued to them, since AuthFilter never hits the DB per request. A just-deleted user (including a self-deleted admin) can keep making authenticated calls on that still-valid token, indistinguishable from any other valid JWT, until it naturally expires — up to the full 15-minute TTL. Accepted as the same tradeoff already made for demotion above, not a separate gap",
@@ -50,8 +51,8 @@ export const AUTH_STRATEGIES =
 		label: "Internal port only",
 		items:
 		[
-			"Bound to an internal port; unreachable from outside the deployment network",
-			"Called exclusively by trusted internal services",
+			"Bound to an internal port on private container networks on one trusted host; the port is not published to the host or public network",
+			"Called exclusively by trusted internal services; this same-host topology uses network isolation without additional internal credentials or TLS. Cross-host or untrusted-network deployments require TLS and authenticated service access before deployment",
 		],
 	},
 	WS_AUTH_HANDSHAKE: {
@@ -200,7 +201,7 @@ export const RATE_LIMITING_INFO =
 		label: "Routes excluded from rate limiting",
 		items:
 		[
-			"/internal/ingest/** — internal port, network-isolated; no HTTP rate limiting applies",
+			"/internal/alerts/trigger-evaluation — internal port, network-isolated; no HTTP rate limiting applies",
 			"The internal LLM-forwarding route — same internal port, same network isolation; no HTTP rate limiting applies",
 		],
 	},

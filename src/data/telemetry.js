@@ -97,7 +97,11 @@ export const TELEMETRY_ENDPOINTS =
 					type: "number (fallback pagination when sort is set to a non-default field — a stable cursor isn't well-defined for arbitrary sort keys)",
 					required: false
 				},
-				{ name: "format",  type: "json | csv (default json); 400 if any other value is supplied", required: false },
+				{
+				   name: "format",
+				   type: "json | csv (default json); 400 if any other value is supplied",
+				   required: false
+				},
 			],
 			body: null,
 		},
@@ -267,8 +271,8 @@ export const TELEMETRY_ENDPOINTS =
 			],
 			rateLimit: "Not exempt: the initial HTTP GET that opens this SSE stream consumes one token from the DEFAULT bucket (10 tokens, +10/60s, keyed by client IP), same as any other GET; once the stream is established, server-push frames over it are not further limited",
 			realtime: {
-				text: "SseEmitter per subscriber. Pushes matching new log records as each batch reaches /internal/ingest/v1/logs — that endpoint's own realtime field is the other side of this same push. Accepts ?token= for JWT or API key (native EventSource cannot set headers).",
-				refs: ["ep-ingest-logs"],
+				text: "SseEmitter per subscriber. On a logs notification accepted by /internal/alerts/trigger-evaluation, the backend reads logs rows from ClickHouse by the reserved attributes['vigil.notification_id'] correlation marker and applies subscriber filters before pushing matching log records. The callback contains metadata, not records; streaming is independent of whether any alert rule triggers. Callback retries may push the same records again; delivery over SSE is best-effort, with no replay guarantee after disconnect or process crash. Accepts ?token= for JWT or API key (native EventSource cannot set headers).",
+				refs: ["ep-alerts-trigger-evaluation"],
 			},
 			fallback: "Browser EventSource reconnects automatically",
 			dedup: "None",
@@ -316,8 +320,8 @@ export const TELEMETRY_ENDPOINTS =
 			rateLimit: "Not exempt: the initial HTTP GET that opens this SSE stream consumes one token from the DEFAULT bucket (10 tokens, +10/60s, keyed by client IP), same as any other GET; once the stream is established, server-push frames over it are not further limited",
 			realtime:
 				{
-					text: "SseEmitter per subscriber. Pushes matching new trace records as each batch reaches /internal/ingest/v1/traces — that endpoint's own realtime field is the other side of this same push. Accepts ?token= for JWT or API key (native EventSource cannot set headers).",
-					refs: ["ep-ingest-traces"],
+					text: "SseEmitter per subscriber. On a traces notification accepted by /internal/alerts/trigger-evaluation, the backend reads traces rows from ClickHouse by the reserved attributes['vigil.notification_id'] correlation marker and applies subscriber filters before pushing matching trace records. The callback contains metadata, not records; streaming is independent of whether any alert rule triggers. Callback retries may push the same records again; delivery over SSE is best-effort, with no replay guarantee after disconnect or process crash. Accepts ?token= for JWT or API key (native EventSource cannot set headers).",
+					refs: ["ep-alerts-trigger-evaluation"],
 				},
 			fallback: "Browser EventSource reconnects automatically",
 			dedup: "None",
@@ -365,8 +369,8 @@ export const TELEMETRY_ENDPOINTS =
 			rateLimit: "Not exempt: the initial HTTP GET that opens this SSE stream consumes one token from the DEFAULT bucket (10 tokens, +10/60s, keyed by client IP), same as any other GET; once the stream is established, server-push frames over it are not further limited",
 			realtime:
 				{
-					text: "SseEmitter per subscriber. Pushes matching new metric records as each batch reaches /internal/ingest/v1/metrics — that endpoint's own realtime field is the other side of this same push. Accepts ?token= for JWT or API key (native EventSource cannot set headers).",
-					refs: ["ep-ingest-metrics"],
+					text: "SseEmitter per subscriber. On a metrics notification accepted by /internal/alerts/trigger-evaluation, the backend reads metrics rows from ClickHouse by the reserved attributes['vigil.notification_id'] correlation marker and applies subscriber filters before pushing matching metric records. The callback contains metadata, not records; streaming is independent of whether any alert rule triggers. Callback retries may push the same records again; delivery over SSE is best-effort, with no replay guarantee after disconnect or process crash. Accepts ?token= for JWT or API key (native EventSource cannot set headers).",
+					refs: ["ep-alerts-trigger-evaluation"],
 				},
 			fallback: "Browser EventSource reconnects automatically",
 			dedup: "None",

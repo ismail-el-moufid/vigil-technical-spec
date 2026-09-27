@@ -21,6 +21,7 @@ export { AI_ENDPOINTS }         from "./ai.js";
 export { INTERNAL_ENDPOINTS }   from "./internal.js";
 export { PAGES }                from "./pages.js";
 export { SCHEMA }               from "./schema.js";
+export { ARCHITECTURE_SECTIONS, ARCHITECTURE_DELIVERY_DIAGRAM } from "./architecture.js";
 
 // Legacy endpoint declarations contain compact `{ error: 'message' }` values.
 // The published contract adds request context to every error, and exposes

@@ -8,7 +8,8 @@ import { FAVICON_FRAMES, FAVICON_FRAME_INTERVAL_MS } from "./faviconFrames.js";
 // and cycle the <link rel="icon"> href between them here.
 export function startFaviconAnimation()
 {
-	if (typeof document === "undefined" || FAVICON_FRAMES.length === 0) return () => {};
+	if (typeof document === "undefined" || FAVICON_FRAMES.length === 0) return () => 
+	{};
 
 	let link = document.querySelector('link[rel="icon"]');
 	if (!link)

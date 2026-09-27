@@ -9,9 +9,9 @@
 }
 
 :root {
-	--bg: #07080c;
-	--surface: #0d0f15;
-	--surface2: #12141c;
+	--bg: #07080c00;
+	--surface: #0d0f157a;
+	--surface2: #0d0f159a;
 	--border: #fff;
 	--border2: #bbb;
 	--text: #fff;
@@ -834,7 +834,9 @@ body {
 	text-transform: uppercase;
 	color: var(--text2);
 	opacity: 0.6;
-	transition: opacity 0.15s, color 0.15s;
+	transition:
+		opacity 0.15s,
+		color 0.15s;
 }
 
 .security-header:hover .security-expand-hint {
@@ -1210,13 +1212,13 @@ body {
    border overrides. Kept as empty selectors (rather than deleting them) so
    Badge.jsx's className wiring stays valid and future per-method theming has
    an obvious place to go back in. */
-.badge--get,
+/*.badge--get,
 .badge--post,
 .badge--put,
 .badge--delete,
 .badge--ws,
 .badge--sse {
-}
+}*/
 
 /* ── FILTER CHIP ACTIVE VARIANTS ── */
 /*.filter-chip--all.active {
@@ -2072,10 +2074,410 @@ body {
 	padding: 0px 5px;
 	margin-left: 6px;
 	cursor: pointer;
-	transition: color 0.1s, border-color 0.1s;
+	transition:
+		color 0.1s,
+		border-color 0.1s;
 }
 
 .ref-pill:hover {
 	color: var(--text);
 	border-color: var(--border);
+}
+
+
+/* ── AUTHENTICATION FLOW ── */
+.auth-flow {
+	margin: 12px 10px 20px;
+	min-width: 0;
+	font-family: var(--font-mono);
+}
+
+.auth-flow-toolbar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: 12px;
+	margin-bottom: 10px;
+	color: var(--text2);
+	font-size: 11px;
+}
+
+.auth-flow-kicker {
+	display: inline-flex;
+	align-items: center;
+	gap: 9px;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+}
+
+.auth-flow-viewport {
+	position: relative;
+	max-width: 100%;
+	max-height: min(76vh, 780px);
+	overflow: auto;
+	overscroll-behavior: contain;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+}
+.nodeLabel {
+	font-size: 16px;
+}
+
+.auth-flow-viewport:focus-visible,
+[aria-controls="security-reference-content"]:focus-visible,
+[aria-controls="security-auth-flow"]:focus-visible {
+	outline: 1px solid var(--accent);
+	outline-offset: 3px;
+}
+
+.auth-flow-svg {
+	display: block;
+	max-width: none;
+	margin-inline: auto;
+}
+
+.auth-flow-spotlight-mask {
+	pointer-events: none;
+}
+
+/* Mermaid owns geometry; these rules only change the rendered appearance. */
+.auth-flow-render .auth-flow-svg .node .label-container,
+.auth-flow-render .auth-flow-svg .cluster rect {
+	fill: transparent !important;
+	stroke: white !important;
+	stroke-width: 0.5px !important;
+	vector-effect: non-scaling-stroke;
+}
+
+.auth-flow-render .auth-flow-svg .cluster-label,
+.auth-flow-render .auth-flow-svg .cluster-label text,
+.auth-flow-render .auth-flow-svg .cluster-label span,
+.auth-flow-render .auth-flow-svg .cluster-label p {
+	color: white !important;
+	fill: white !important;
+}
+
+.auth-flow-render .auth-flow-svg .edgePaths path {
+	stroke: var(--border, white) !important;
+	stroke-width: 0.5px !important;
+	vector-effect: non-scaling-stroke;
+}
+
+.auth-flow-edge-base {
+	opacity: 0.06;
+	pointer-events: none;
+}
+
+.auth-flow-render .auth-flow-svg .auth-flow-edge-base path {
+	stroke: white !important;
+	stroke-width: 1px !important;
+}
+
+.auth-flow-render .auth-flow-svg marker path {
+	fill: var(--border, white) !important;
+	stroke: var(--border, white) !important;
+}
+
+.auth-flow-render .auth-flow-svg .edgeLabel,
+.auth-flow-render .auth-flow-svg .edgeLabel p,
+.auth-flow-render .auth-flow-svg .labelBkg {
+	background: transparent !important;
+	fill: transparent !important;
+}
+
+.auth-flow-caption {
+	margin-top: 12px;
+	padding-left: 12px;
+	border-left: 1px solid color-mix(in srgb, var(--accent) 42%, transparent);
+	color: var(--text2);
+	font-size: 11px;
+	line-height: 1.8;
+}
+
+.auth-flow-caption ul {
+	padding-left: 20px;
+	margin-top: 8px;
+}
+
+.auth-flow-caption li + li {
+	margin-top: 4px;
+}
+
+.auth-flow-caption code {
+	color: var(--text);
+	font: inherit;
+}
+
+@media (max-width: 760px) {
+	.auth-flow-viewport {
+		max-height: none;
+	}
+}
+
+
+/* ── ARCHITECTURE ── */
+.architecture-view
+{
+	max-width: 1200px;
+	margin: 0 auto;
+	padding: clamp(16px, 3vw, 40px);
+	background: var(--bg);
+	color: var(--text);
+	font-family: var(--font-sans);
+	line-height: 1.65;
+}
+
+.architecture-view *,
+.architecture-view *::before,
+.architecture-view *::after
+{
+	box-sizing: border-box;
+}
+
+.architecture-header h1
+{
+	margin: 8px 0 12px;
+	font-size: clamp(1.6rem, 3vw, 2.4rem);
+	line-height: 1.2;
+}
+
+.architecture-header > p,
+.architecture-summary,
+.architecture-card p
+{
+	color: var(--text2);
+}
+
+.architecture-eyebrow,
+.architecture-number,
+.architecture-status
+{
+	font-family: var(--font-mono);
+	font-size: 0.75rem;
+}
+
+.architecture-header .architecture-eyebrow,
+.architecture-number
+{
+	color: var(--accent);
+}
+
+.architecture-notice
+{
+	padding: 12px 16px;
+	border-left: 3px solid var(--accent);
+	background: var(--surface);
+}
+
+.architecture-nav
+{
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin: 24px 0 32px;
+}
+
+.architecture-nav a
+{
+	display: inline-flex;
+	align-items: center;
+	min-height: 44px;
+	padding: 8px 12px;
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	background: var(--surface);
+	color: var(--text);
+	font-size: 0.875rem;
+	text-decoration: none;
+}
+
+.architecture-nav a:hover,
+.architecture-nav a[aria-current="location"]
+{
+	border-color: var(--accent);
+	background: var(--surface2);
+}
+
+.architecture-view :focus-visible
+{
+	outline: 2px solid var(--accent);
+	outline-offset: 4px;
+}
+
+.architecture-sections
+{
+	display: grid;
+	gap: 28px;
+}
+
+.architecture-section
+{
+	min-width: 0;
+	padding: clamp(16px, 2.5vw, 28px);
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	background: var(--surface);
+	scroll-margin-top: 24px;
+}
+
+.architecture-section-highlighted
+{
+	border-color: var(--accent);
+}
+
+.architecture-section-heading
+{
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 12px;
+}
+
+.architecture-section-heading h2
+{
+	flex: 1 1 200px;
+	margin: 0;
+	font-size: 1.25rem;
+	line-height: 1.35;
+}
+
+.architecture-status
+{
+	display: inline-block;
+	padding: 4px 8px;
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	background: var(--bg);
+	color: var(--text);
+}
+
+.architecture-summary
+{
+	max-width: 85ch;
+	margin: 16px 0 20px;
+}
+
+.architecture-cards
+{
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 14px;
+}
+
+.architecture-card
+{
+	min-width: 0;
+	padding: 18px;
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	background: var(--surface2);
+	overflow-wrap: anywhere;
+}
+
+.architecture-card h3
+{
+	margin: 0 0 10px;
+	font-size: 1rem;
+	line-height: 1.45;
+}
+
+.architecture-card .architecture-status
+{
+	margin-bottom: 10px;
+}
+
+.architecture-card p
+{
+	margin: 0;
+	font-size: 0.9rem;
+}
+
+.architecture-diagram
+{
+	margin: 24px 0 0;
+	padding: 18px;
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	background: var(--bg);
+}
+
+.architecture-diagram figcaption
+{
+	margin-bottom: 16px;
+	font-size: 0.875rem;
+	font-weight: 600;
+}
+
+.architecture-diagram-canvas
+{
+	overflow-x: auto;
+	text-align: center;
+}
+
+.architecture-diagram-canvas svg
+{
+	display: block;
+	width: 100%;
+	height: auto;
+	margin: 0 auto;
+}
+
+.architecture-diagram details
+{
+	margin-top: 16px;
+	color: var(--text2);
+	font-size: 0.875rem;
+}
+
+.architecture-diagram summary
+{
+	padding: 8px 0;
+	cursor: pointer;
+}
+
+.architecture-diagram pre
+{
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	font-family: var(--font-mono);
+	font-size: 0.75rem;
+}
+
+.architecture-error
+{
+	padding: 12px;
+	border: 1px solid var(--accent);
+	color: var(--text);
+	overflow-wrap: anywhere;
+}
+
+.architecture-diagram-staging
+{
+	position: absolute;
+	left: -10000px;
+	top: 0;
+	width: 1000px;
+	visibility: hidden;
+	pointer-events: none;
+}
+
+@media (max-width: 680px)
+{
+	.architecture-cards
+	{
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.architecture-section-heading h2
+	{
+		flex-basis: calc(100% - 40px);
+	}
+
+	.architecture-diagram
+	{
+		padding: 12px;
+	}
 }

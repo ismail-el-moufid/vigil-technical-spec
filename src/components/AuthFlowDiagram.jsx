@@ -1,6 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import authFlowMarkdown from "../../auth-setup-flow.md?raw";
-import "./AuthFlowDiagram.css";
 
 const MOBILE_LAYOUT_QUERY = "(max-width: 760px)";
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -266,6 +265,7 @@ export default function AuthFlowDiagram()
 				mermaid.initialize({
 					startOnLoad: false,
 					securityLevel: "strict",
+
 					theme: "base",
 					themeVariables: {
 						background: "transparent",
@@ -280,11 +280,151 @@ export default function AuthFlowDiagram()
 				});
 				const renderId = `auth-flow-mermaid-${++renderSequence}`;
 				const parsed = await mermaid.mermaidAPI.getDiagramFromText(source);
-				const graphEdges = parsed.db.getData().edges;
+				const graphData = parsed.db.getData();
+				const graphEdges = graphData.edges;
 				const { svg: markup } = await mermaid.render(renderId, source);
 				if (cancelled) return;
 				const diagram = prepareDiagram(markup, renderId, graphEdges);
 				host.replaceChildren(diagram.svg);
+				// Route the whole labeled branch, not just its final arrowhead.
+				const findNode = (name) => diagram.svg.querySelector(`.node[id^="${renderId}-flowchart-${name}-"]`);
+				const backendNodes = new Set(graphData.nodes.filter((node) => node.parentId === "BACKEND").map((node) => node.id));
+				const backendCluster =
+				[...diagram.svg.querySelectorAll(".cluster")]
+					.find((cluster) => cluster.querySelector(":scope > .cluster-label")?.textContent.trim() === "Backend");
+				if (!backendCluster || !backendNodes.size) throw new Error("Unable to locate the backend section for positioning.");
+				const backendOffset = -80;
+				function moveBackendElement(element)
+				{
+					if (!element) throw new Error("Unable to locate a backend diagram element.");
+					const transform = element.getAttribute("transform") || "";
+					element.setAttribute("transform", `translate(${backendOffset}, 0) ${transform}`);
+				}
+				moveBackendElement(backendCluster);
+				for (const node of backendNodes) moveBackendElement(findNode(node));
+				const edgesById = new Map(graphEdges.map((edge) => [edge.id, edge]));
+				for (const path of diagram.svg.querySelectorAll(".edgePaths path[data-id]"))
+				{
+					const edge = edgesById.get(path.getAttribute("data-id"));
+					if (!edge) continue;
+					const moveStart = backendNodes.has(edge.start);
+					const moveEnd = backendNodes.has(edge.end);
+					if (moveStart && moveEnd)
+					{
+						moveBackendElement(path);
+						continue;
+					}
+					if (!moveStart && !moveEnd) continue;
+					const length = path.getTotalLength();
+					const start = path.getPointAtLength(0);
+					const end = path.getPointAtLength(length);
+					const outgoing = path.getPointAtLength(Math.min(12, length));
+					const incoming = path.getPointAtLength(Math.max(0, length - 12));
+					const startOffset = moveStart ? backendOffset : 0;
+					const endOffset = moveEnd ? backendOffset : 0;
+					const first = new DOMPoint(start.x + (outgoing.x - start.x) * 3 + startOffset, start.y + (outgoing.y - start.y) * 3);
+					const last = new DOMPoint(end.x + (incoming.x - end.x) * 3 + endOffset, end.y + (incoming.y - end.y) * 3);
+					path.setAttribute("d", `M ${start.x + startOffset},${start.y} C ${first.x},${first.y} ${last.x},${last.y} ${end.x + endOffset},${end.y}`);
+				}
+				const resultBox = findNode("C")?.querySelector(".label-container");
+				const setupBox = findNode("P")?.querySelector(".label-container");
+				const label401 = findNode("C_401");
+				if (!resultBox || !setupBox || !label401) throw new Error("Unable to locate the nodes for the 401 setup branch.");
+				const svgMatrix = diagram.svg.getScreenCTM();
+				function boundsInDiagram(element)
+				{
+					const box = element.getBBox();
+					const matrix = svgMatrix.inverse().multiply(element.getScreenCTM());
+					const corner = new DOMPoint(box.x, box.y).matrixTransform(matrix);
+					const opposite = new DOMPoint(box.x + box.width, box.y + box.height).matrixTransform(matrix);
+					return {
+					   x: corner.x,
+					   y: corner.y,
+					   width: opposite.x - corner.x,
+					   height: opposite.y - corner.y
+					};
+				}
+				const result = boundsInDiagram(resultBox);
+				const setup = boundsInDiagram(setupBox);
+				const label = boundsInDiagram(label401);
+				const sourceCenter = new DOMPoint(result.x + result.width / 2, result.y + result.height / 2);
+				const target = new DOMPoint(setup.x + setup.width / 2, setup.y - 4);
+				const direction = target.x < sourceCenter.x ? -1 : 1;
+				const labelCenter = new DOMPoint(
+					sourceCenter.x + direction * Math.max(
+						Math.abs(target.x - sourceCenter.x) / 2,
+						result.width / 2 + label.width / 2 + 40,
+					),
+					Math.max(result.y + result.height + label.height / 2 + 32,
+						(result.y + result.height + target.y) / 2),
+				);
+				const localLabel = label401.getBBox();
+				const labelPosition = labelCenter.matrixTransform(label401.parentNode.getScreenCTM().inverse().multiply(svgMatrix));
+				label401.setAttribute("transform", `translate(${labelPosition.x - localLabel.x - localLabel.width / 2}, ${labelPosition.y - localLabel.y - localLabel.height / 2})`);
+				const sourcePort = new DOMPoint(sourceCenter.x, result.y + result.height);
+				function routeBranch(startNode, endNode, from, to, approach = null)
+				{
+					const edge = graphEdges.find((entry) => entry.start === startNode && entry.end === endNode);
+					const paths =
+					[...diagram.svg.querySelectorAll(".edgePaths path[data-id]")]
+						.filter((path) => path.getAttribute("data-id") === edge?.id);
+					if (!paths.length) throw new Error(`Unable to locate connector ${startNode} → ${endNode}.`);
+					for (const path of paths)
+					{
+						const matrix = path.getScreenCTM().inverse().multiply(svgMatrix);
+						const start = from ? from.matrixTransform(matrix) : path.getPointAtLength(0);
+						const end = to.matrixTransform(matrix);
+						const control = approach?.matrixTransform(matrix);
+						path.setAttribute("d", control
+							? `M ${start.x},${start.y} C ${start.x},${start.y} ${control.x},${control.y} ${end.x},${end.y}`
+							: `M ${start.x},${start.y} L ${end.x},${end.y}`);
+					}
+				}
+				function routeSmoothBranch(startNode, endNode, points, horizontalAtStart = false)
+				{
+					const edge = graphEdges.find((entry) => entry.start === startNode && entry.end === endNode);
+					const paths =
+					[...diagram.svg.querySelectorAll(".edgePaths path[data-id]")]
+						.filter((path) => path.getAttribute("data-id") === edge?.id);
+					if (!paths.length) throw new Error(`Unable to locate connector ${startNode} → ${endNode}.`);
+					for (const path of paths)
+					{
+						const matrix = path.getScreenCTM().inverse().multiply(svgMatrix);
+						const [
+						   start,
+						   first,
+						   last,
+						   end,
+						   horizontal
+						] = points.map((point) => point.matrixTransform(matrix));
+						path.setAttribute("d", horizontalAtStart
+							? `M ${start.x},${start.y} L ${horizontal.x},${horizontal.y} C ${first.x},${first.y} ${last.x},${last.y} ${end.x},${end.y}`
+							: horizontal
+								? `M ${start.x},${start.y} C ${first.x},${first.y} ${last.x},${last.y} ${horizontal.x},${horizontal.y} L ${end.x},${end.y}`
+								: `M ${start.x},${start.y} C ${first.x},${first.y} ${last.x},${last.y} ${end.x},${end.y}`);
+					}
+				}
+				const labelIn = new DOMPoint(labelCenter.x - direction * (label.width / 2 + 4), labelCenter.y);
+				const labelOut = new DOMPoint(labelCenter.x + direction * (label.width / 2 + 4), labelCenter.y);
+				const entry = new DOMPoint(labelIn.x - direction * 16, labelIn.y);
+				const exit = new DOMPoint(labelOut.x + direction * 16, labelOut.y);
+				routeSmoothBranch("C", "C_401", [
+					sourcePort,
+					new DOMPoint(sourcePort.x, sourcePort.y + 40),
+					new DOMPoint(entry.x - direction * 36, entry.y),
+					labelIn,
+					entry,
+				]);
+				routeSmoothBranch("C_401", "P", [
+					labelOut,
+					new DOMPoint(exit.x + direction * 36, exit.y),
+					new DOMPoint(target.x, target.y - 40),
+					target,
+					exit,
+				], true);
+				routeBranch("R", "C", null,
+					new DOMPoint(result.x - 4, sourceCenter.y),
+					new DOMPoint(result.x - 48, sourceCenter.y));
 				for (const cluster of diagram.svg.querySelectorAll(".cluster"))
 				{
 					const label = cluster.querySelector(":scope > .cluster-label");
@@ -298,8 +438,16 @@ export default function AuthFlowDiagram()
 					const y = originalY - (labelScale - 1) * (box.y + box.height / 2);
 					label.setAttribute("transform", `translate(${x}, ${y}) scale(${labelScale})`);
 				}
+				const bounds = diagram.svg.getBBox();
+				const view = diagram.svg.viewBox.baseVal;
+				const padding = 20;
+				const minX = Math.min(view.x, bounds.x - padding);
+				const minY = Math.min(view.y, bounds.y - padding);
+				const maxX = Math.max(view.x + view.width, bounds.x + bounds.width + padding);
+				const maxY = Math.max(view.y + view.height, bounds.y + bounds.height + padding);
+				diagram.svg.setAttribute("viewBox", `${minX} ${minY} ${maxX - minX} ${maxY - minY}`);
 				stopAnimation = startArrowSequence(diagram.svg, graphEdges);
-				setDimensions({ width: diagram.width, height: diagram.height });
+				setDimensions({ width: maxX - minX, height: maxY - minY });
 				setStatus("ready");
 			}
 			catch (cause)
@@ -351,8 +499,8 @@ export default function AuthFlowDiagram()
 			<figcaption className="auth-flow-caption">
 				<p id={instructionsId}>The frontend reuses a valid in-memory access token and uses refresh only when it is missing or expired. The diagram automatically fits the available width and switches to a vertical layout on mobile.</p>
 				<ul>
-					<li>A hard reload clears the in-memory access token, so it takes the refresh path.</li>
-					<li>An empty refresh cookie follows the missing-cookie path. An invalid, expired, or revoked non-empty cookie returns an ordinary <code>401</code>.</li>
+					<li>Logged in and reloading: <code>session_hint=1</code> means request a new access token because reload cleared the old one from memory. Logged out and reloading: no hint means skip the pointless refresh request and check setup status to choose the login or setup screen.</li>
+					<li>The hint is not proof of login. Missing or empty refresh cookies return <code>401</code> before any database query; invalid, expired, or revoked cookies also return <code>401</code>. Refresh <code>401</code> clears both cookies.</li>
 					<li>Network failures, <code>429</code>, and <code>5xx</code> from refresh or setup status remain error/retry states, not login redirects.</li>
 					<li>Setup status is informational only. Setup creation must atomically verify that initial setup remains allowed.</li>
 				</ul>

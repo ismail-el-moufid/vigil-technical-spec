@@ -158,11 +158,9 @@ export const SCHEMA =
 				name: "signal_type",
 				type: "TEXT",
 				notes: {
-					text: "logs | metrics | traces — which ingest evaluator owns this rule. Each ingest endpoint only matches and evaluates alert_rules rows whose signal_type equals its own table; the other two skip the row entirely. This is what makes it well-defined for a rule to be evaluated by exactly one evaluator instead of being independently (and inconsistently) interpreted by all three. Set at creation, immutable thereafter — not accepted by the update endpoint's PATCH body under any circumstance, default-rule or not",
+					text: "logs | metrics | traces — the single trigger-evaluation callback dispatches each notification to its signal_type evaluator, matching only enabled rules for that signal and each notified service. Each rule has exactly one signal_type; the other signal evaluators skip it. Set at creation, immutable thereafter — not accepted by the update endpoint's PATCH body under any circumstance, default-rule or not",
 					refs: [
-					   "ep-ingest-logs",
-					   "ep-ingest-metrics",
-					   "ep-ingest-traces",
+					   "ep-alerts-trigger-evaluation",
 					   "ep-alert-rules-update"
 					],
 				}
@@ -179,12 +177,12 @@ export const SCHEMA =
 				name: "aggregation",
 				type: "TEXT",
 				nullable: true,
-				notes: "one of latest | avg | sum | min | max | count | p50 | p95 | p99. Required and meaningful only when signal_type = metrics: applied to 'value' across every point matching name = metric_name within the window, ending at the triggering batch's latest timestamp — 'latest' takes just the single most recent matching point (this is the direct equivalent of the old pre-windowing instantaneous check, so existing metrics-rule behavior is expressible, not lost). Must be null when signal_type = logs | traces, since the aggregation there is already baked into metric_name's closed enum (e.g. p95_duration_ms already says 'p95 of duration_ms' — a separate aggregation value would be redundant and could disagree with it). A non-null aggregation on a logs/traces rule, or a null aggregation on a metrics rule, is a 400 at create/update time"
+				notes: "one of latest | avg | sum | min | max | count | p50 | p95 | p99. Required and meaningful only when signal_type = metrics: applied to 'value' across every point matching name = metric_name within the window, ending at the matching services entry's latest_timestamp (event time) in the trigger-evaluation notification — 'latest' takes just the single most recent matching point (this is the direct equivalent of the old pre-windowing instantaneous check, so existing metrics-rule behavior is expressible, not lost). Must be null when signal_type = logs | traces, since the aggregation there is already baked into metric_name's closed enum (e.g. p95_duration_ms already says 'p95 of duration_ms' — a separate aggregation value would be redundant and could disagree with it). A non-null aggregation on a logs/traces rule, or a null aggregation on a metrics rule, is a 400 at create/update time"
 			},
 			{
 				name: "window_seconds",
 				type: "INTEGER",
-				notes: "how far back from the triggering batch's latest timestamp the evaluator looks when computing this rule's aggregate, for all three signal_types uniformly — this is the field that makes logs/traces/metrics evaluation symmetric; previously logs/traces referenced an undefined 'configured time window' with no backing column, and metrics had no window concept at all. Required at create time, minimum 10 (400 below that). Not the same knob as vigil.silence-timeout-seconds: that config is how long a service can go without ANY batch before the separate silence watchdog fires; window_seconds is how far back a single threshold rule looks once a batch does arrive — the two are unrelated and can differ freely"
+				notes: "how far back from the matching services entry's latest_timestamp (event time) in the trigger-evaluation notification the evaluator looks when computing this rule's aggregate, for all three signal_types uniformly — this is the field that makes logs/traces/metrics evaluation symmetric; previously logs/traces referenced an undefined 'configured time window' with no backing column, and metrics had no window concept at all. Required at create time, minimum 10 (400 below that). Not the same knob as vigil.silence-timeout-seconds: that config measures silence from last_seen = max(stored_at) across valid callbacks on all signals, without refreshing on retries or older late delivery; window_seconds is how far back a single threshold rule looks when a notification is evaluated, over all stored rows in the window, not only rows with its notification_id — the two are unrelated and can differ freely"
 			},
 			{
 				name: "threshold",
@@ -212,6 +210,7 @@ export const SCHEMA =
 	alert_history:
 	{
 		db: "PostgreSQL",
+		notes: "No automatic expiry; alert history is retained until an explicit cleanup policy is introduced. Included in daily encrypted off-host PostgreSQL backups retained for 7 days.",
 		columns:
 		[
 			{
@@ -241,7 +240,7 @@ export const SCHEMA =
 				name: "signal_type",
 				type: "TEXT",
 				nullable: true,
-				notes: "snapshotted from alert_rules at insert time, same reasoning as metric_name. Null specifically for a silence-watchdog alert (rule_id also null there) — a silence alert isn't produced by any one signal type's evaluator, since the shared watchdog timer resets on a batch of any signal type; treat signal_type === null the same way as metric_name === 'service_silent' (an expected, self-describing case), not as a missing/erroneous value"
+				notes: "snapshotted from alert_rules at insert time, same reasoning as metric_name. Null specifically for a silence-watchdog alert (rule_id also null there) — a silence alert isn't produced by any one signal type's evaluator, since the shared watchdog uses last_seen = max(stored_at) across all signal types, not callback receipt time; retries and older late deliveries cannot extend freshness; treat signal_type === null the same way as metric_name === 'service_silent' (an expected, self-describing case), not as a missing/erroneous value"
 			},
 			{
 				name: "window_seconds",
@@ -327,6 +326,7 @@ export const SCHEMA =
 	logs:
 	{
 		db: "ClickHouse",
+		notes: "Single-node MergeTree with persistent storage. PARTITION BY toYYYYMM(timestamp); ORDER BY (service, timestamp); TTL timestamp + INTERVAL 30 DAY DELETE. Synchronous inserts; backend queries the same instance. TTL cleanup is asynchronous, not immediate erasure. Daily encrypted off-host backups retained for 7 days.",
 		columns:
 		[
 			{
@@ -342,7 +342,8 @@ export const SCHEMA =
 			{
 				name: "attributes",
 				type: "Map(String, String)",
-				nullable: true
+				nullable: true,
+				notes: "Writer stamps reserved attributes['vigil.notification_id'] after row dedup and before storage, overwriting any client value. Matches the callback notification_id for exact-row SSE queries; evaluation windows are not restricted to this ID. Uses the existing attributes map, not a new ClickHouse table"
 			},
 		],
 	},
@@ -350,6 +351,7 @@ export const SCHEMA =
 	metrics:
 	{
 		db: "ClickHouse",
+		notes: "Single-node MergeTree with persistent storage. PARTITION BY toYYYYMM(timestamp); ORDER BY (service, name, timestamp); TTL timestamp + INTERVAL 30 DAY DELETE. Synchronous inserts; backend queries the same instance. TTL cleanup is asynchronous, not immediate erasure. Daily encrypted off-host backups retained for 7 days.",
 		columns:
 		[
 			{
@@ -373,7 +375,7 @@ export const SCHEMA =
 				type: "Map(String, String)",
 				nullable: true,
 				notes: {
-					text: "The metrics endpoint's ?vigil.internal=true filter is implemented as attributes['internal'] = 'true' here — there is no dedicated 'internal' column",
+					text: "The metrics endpoint's ?vigil.internal=true filter is implemented as attributes['internal'] = 'true' here — there is no dedicated 'internal' column. Writer stamps reserved attributes['vigil.notification_id'] after row dedup and before storage, overwriting any client value, to correlate exact persisted rows for callback-driven SSE; evaluation windows are not restricted to this ID",
 					refs: ["ep-telemetry-metrics"],
 				}
 			},
@@ -383,6 +385,7 @@ export const SCHEMA =
 	traces:
 	{
 		db: "ClickHouse",
+		notes: "Single-node MergeTree with persistent storage. PARTITION BY toYYYYMM(timestamp); ORDER BY (service, timestamp, trace_id, span_id); TTL timestamp + INTERVAL 30 DAY DELETE. Synchronous inserts; backend queries the same instance. TTL cleanup is asynchronous, not immediate erasure. Daily encrypted off-host backups retained for 7 days.",
 		columns:
 		[
 			{
@@ -417,7 +420,8 @@ export const SCHEMA =
 			{
 				name: "attributes",
 				type: "Map(String, String)",
-				nullable: true
+				nullable: true,
+				notes: "Writer stamps reserved attributes['vigil.notification_id'] after row dedup and before storage, overwriting any client value. Matches the callback notification_id for exact-row SSE queries; evaluation windows are not restricted to this ID. Uses the existing attributes map, not a new ClickHouse table"
 			},
 		],
 	},

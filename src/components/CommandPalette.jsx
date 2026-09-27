@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { ENDPOINTS, PAGES } from "../data";
+import { ARCHITECTURE_SECTIONS } from "../data/architecture.js";
 import Badge from "./ui/Badge.jsx";
 import { isPhone } from "../utils/device.js";
 
@@ -47,7 +48,15 @@ export default function CommandPalette({ open, onClose, onNavigate })
 		const pages = PAGES
 			.filter(p => !q || p.name.toLowerCase().includes(q) || p.path.toLowerCase().includes(q))
 			.map(p => ({ kind: "page", id: p.id, label: p.name, sub: p.path }));
-		return [...eps, ...pages].slice(0, 12);
+		const architecture = ARCHITECTURE_SECTIONS
+			.filter(section => !q || `architecture ${section.title} ${section.summary}`.toLowerCase().includes(q))
+			.map(section => ({
+			   kind: "architecture",
+			   id: section.id,
+			   label: section.title,
+			   sub: "Architecture"
+			}));
+		return [...eps, ...pages, ...architecture].slice(0, 12);
 	}, [query]);
 
 	// Derive a safe cursor: clamp to valid range during render, no effect needed
@@ -91,7 +100,7 @@ export default function CommandPalette({ open, onClose, onNavigate })
 
 	function commit(r)
 	{
-		onNavigate(r.kind === "endpoint" ? "endpoints" : "pages", r.kind === "endpoint" ? r.id : null, r.kind === "page" ? r.id : null);
+		onNavigate(r.kind === "endpoint" ? "endpoints" : r.kind === "page" ? "pages" : "architecture", r.kind === "endpoint" ? r.id : null, r.kind === "page" ? r.id : null, r.kind === "architecture" ? r.id : null);
 		setQuery("");  // reset query on commit — in an event handler, always fine
 		setCursor(0);
 		onClose();
@@ -110,7 +119,7 @@ export default function CommandPalette({ open, onClose, onNavigate })
 					<input
 						ref={inputRef}
 						className="pal-input"
-						placeholder="Jump to endpoint or page…"
+						placeholder="Jump to endpoint, page, or architecture…"
 						value={query}
 						onChange={handleQueryChange}
 						onKeyDown={handleKey}

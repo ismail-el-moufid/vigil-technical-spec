@@ -4,7 +4,11 @@ const byId = new Map();
 
 for (const ep of ENDPOINTS)
 {
-	byId.set(ep.id, { label: `${ep.method} ${ep.route}`, kind: "endpoint", data: ep });
+	byId.set(ep.id, {
+	   label: `${ep.method} ${ep.route}`,
+	   kind: "endpoint",
+	   data: ep
+	});
 }
 
 for (const key of Object.keys(AUTH_STRATEGIES))

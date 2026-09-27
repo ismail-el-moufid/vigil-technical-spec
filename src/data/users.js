@@ -253,6 +253,7 @@ export const USERS_ENDPOINTS =
 			[
 				"If the target is currently the only user with role: admin, request is rejected with 409 — prevents the deployment from ending up with zero admins",
 				"sessions.user_id and refresh_tokens.user_id are declared ON DELETE CASCADE — deleting a user removes all of their sessions and refresh_tokens rows in the same transaction as the users delete, so the 204 path never hits a dangling FK constraint",
+				"Deleting another user does not clear the caller's refresh_token or session_hint. It cannot clear cookies in the deleted user's browsers either: their hints can remain stale, but their next POST /api/auth/refresh returns 401 and clears both cookies. The hint only tells the frontend to try refresh; it never proves the account or session still exists. After self-deletion, the frontend discards its access token and clears session_hint at Path=/; the remaining HttpOnly refresh cookie is unusable because its database row was deleted",
 				"alert_acks.user_id is also ON DELETE CASCADE — a deleted user's alert acknowledgment history is removed with them; this is an explicit, accepted product decision (not silent data loss) since re-showing acks for a deleted account has no meaningful owner to display",
 				"400 returned if the {id} path segment isn't a syntactically valid UUID — malformed path params are rejected the same way as malformed query params or body fields elsewhere in this spec, not left to fall through to an unhandled 500 or a misleading 404",
 			],

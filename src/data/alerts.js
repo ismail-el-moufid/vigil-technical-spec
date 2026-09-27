@@ -214,7 +214,7 @@ export const ALERT_ENDPOINTS =
 				"400 returned if severity is present but not one of info | warning | critical — same validation pattern as role on the users endpoints",
 				"403 is returned when an authenticated caller lacks the ADMIN role — this endpoint's requiredRole is ADMIN, shown on the Role pill above",
 				{
-					text: "No dedup key: alert_rules carries no uniqueness constraint, and this endpoint does not check for an existing rule with matching service/signal_type/metric_name/aggregation before insert — a retried or double-submitted POST creates a second, functionally-identical row rather than erroring or upserting. Accepted scope decision for this project: unlike the users/webhooks create endpoints (DB-unique-constraint-backed 409) or the ingest endpoints (explicit hash-based dedup window), duplicate rule creation here is treated as user/client error, not guarded against server-side. An admin who creates a duplicate rule can remove it same as any other non-default rule",
+					text: "No dedup key: alert_rules carries no uniqueness constraint, and this endpoint does not check for an existing rule with matching service/signal_type/metric_name/aggregation before insert — a retried or double-submitted POST creates a second, functionally-identical row rather than erroring or upserting. Accepted scope decision for this project: unlike the users/webhooks create endpoints (DB-unique-constraint-backed 409), duplicate rule creation here is treated as user/client error, not guarded against server-side. An admin who creates a duplicate rule can remove it same as any other non-default rule",
 					refs: ["ep-users-create", "ep-webhooks-create", "ep-alert-rules-delete"],
 				},
 			],
