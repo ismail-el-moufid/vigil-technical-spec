@@ -9,7 +9,7 @@
 }
 
 :root {
-	--bg: #07080c00;
+	--bg: #030301;
 	--surface: #0d0f157a;
 	--surface2: #0d0f159a;
 	--border: #fff;
@@ -2224,7 +2224,7 @@ body {
 	max-width: 1200px;
 	margin: 0 auto;
 	padding: clamp(16px, 3vw, 40px);
-	background: var(--bg);
+	background: var(--surface);
 	color: var(--text);
 	font-family: var(--font-sans);
 	line-height: 1.65;
@@ -2344,16 +2344,6 @@ body {
 	line-height: 1.35;
 }
 
-.architecture-status
-{
-	display: inline-block;
-	padding: 4px 8px;
-	border: 1px solid var(--border);
-	border-radius: 4px;
-	background: var(--bg);
-	color: var(--text);
-}
-
 .architecture-summary
 {
 	max-width: 85ch;
@@ -2401,7 +2391,7 @@ body {
 	padding: 18px;
 	border: 1px solid var(--border);
 	border-radius: 6px;
-	background: var(--bg);
+	background: var(--surface2);
 }
 
 .architecture-diagram figcaption
