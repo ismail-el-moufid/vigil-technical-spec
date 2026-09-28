@@ -41,7 +41,7 @@ export const AUTH_STRATEGIES =
 		[
 			"Program-level lifetime",
 			"vigil.api-key: sourced from the same @ConfigurationProperties bean, auto-generated as a UUID via @PostConstruct at startup and held in memory only if left unset — this auto-generated, in-memory-only behavior is the intended design as-is, not a dev-mode default awaiting a production override. Accepted tradeoff of that design: a restart silently rotates it, breaking any external API client holding the old value with no warning, and a multi-instance deployment mints a different key per instance since nothing pins it identically everywhere",
-			"Not tied to a users row, so it has no role of its own — treated as ADMIN-equivalent on every endpoint that accepts it, including ADMIN-only ones. It is an operator/service credential (used by external API clients, etc.), not a per-person credential — anyone holding it has full API access regardless of the endpoint's requiredRole",
+			"Bound to a persisted users row with email mustbe@api.email and role admin (ADMIN authority), created with a cryptographically random password in the same transaction as the first human admin during POST /api/setup. Store only the salted bcrypt password hash; never return or log the generated password. Valid API-key authentication resolves this user as the SecurityContext principal, including its user ID for per-user operations such as alert acknowledgments. Role checks use this user's role rather than a roleless ADMIN bypass. Before setup creates the user, API-key authentication cannot succeed. The user is not recreated on restart; startup key generation/rotation remains unchanged",
 		],
 	},
 	INTERNAL_ONLY: {
@@ -189,7 +189,7 @@ export const RATE_LIMITING_INFO =
 		[
 			"Capacity: 10 tokens. Refill: +10 every 60 s.",
 			"Keyed by client IP — shared bucket across all endpoints for that IP, not one bucket per route",
-			"429 Too Many Requests + Retry-After header on exhaustion",
+			"429 Too Many Requests on exhaustion, with error.message combining the reason and retry delay: 'rate limited; retry in <seconds> seconds'. Replace <seconds> with the positive whole-second wait until the bucket permits another request, rounding up. Do not send a Retry-After header or a separate retry field. Over-limit WebSocket ack frames use the same combined text in message and keep the connection open",
 			"Rate check runs before auth — an exhausted IP never reaches AuthFilter",
 			"Bucket counts requests, not rows: GET ?format=csv on the telemetry endpoints (metrics/traces/logs) ignores pagination and returns the full matching dataset as one unpaginated text/csv response, but still consumes exactly one token, same as a normal small page — this is what makes CSV export viable without a separate rate-limit carve-out",
 			"Known simplification: a single page load can consume several tokens at once (e.g. Overview: 3 REST GETs + 3 SSE upgrades = 6 of 10), and the bucket is shared per-IP, so multiple users behind the same NAT/proxy draw from the same 10. Acceptable for project scope; a production system would key per-user and/or size buckets per-route.",
@@ -221,7 +221,7 @@ export const RATE_LIMITING_INFO =
 export const ROLE_ENFORCEMENT_INFO =
 {
 	note: {
-		text: 'The filter resolves identity only — it answers "who is this?". Role checks (@PreAuthorize or explicit) live in the controller or service layer, not the filter. The roles below describe JWT-authenticated callers; a valid API_KEY satisfies every tier including ADMIN, since it carries no role of its own.',
+		text: 'The filter resolves identity only — it answers "who is this?". Role checks (@PreAuthorize or explicit) live in the controller or service layer, not the filter. The roles below apply to JWT and API-key callers alike; API_KEY resolves the default mustbe@api.email user, created with role admin during first-admin setup, and uses that user’s role for authorization.',
 		refs: ["gw-strat-api-key"],
 	},
 	roles:

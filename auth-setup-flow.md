@@ -59,4 +59,8 @@ An empty cookie value follows the missing-cookie path even if the cookie header 
 
 The setup-status endpoint is informational only. The setup-creation endpoint must independently and atomically verify that setup is still allowed so that two clients cannot both create the initial administrator after observing `setup_required: true`. Prefer tracking explicit setup completion state if the backend has such a mechanism; otherwise, the status endpoint can derive it from whether the `users` table is empty.
 
+Successful first-admin setup atomically creates two `users` rows: the human admin from the submitted credentials and a separate API-key user with email `mustbe@api.email`, a cryptographically random password stored only as a salted bcrypt hash, and role `admin` (`ADMIN` authority). That email is reserved from the human setup input. The generated password is never returned or logged; the setup response tokens and cookies belong only to the human admin. API-key authentication acts as the persisted default user, not a roleless admin bypass. The user is created during setup, not during startup key generation.
+
+Rate-limit responses put both the reason and retry delay in one message: `rate limited; retry in <seconds> seconds`, with the wait rounded up to whole seconds. HTTP `429` uses `error.message` in the contextual error envelope; WebSocket rate-limit errors use `message` and leave the connection open. Neither uses a separate retry field, and HTTP does not send a `Retry-After` header.
+
 The token's local expiry check is only a frontend shortcut; the backend still validates it on protected requests.

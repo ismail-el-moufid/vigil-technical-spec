@@ -21,7 +21,7 @@ export const AI_ENDPOINTS =
 			done:  "data: { done: true }",
 			400: "{ error: '<validation message>' }",
 			401: "{ error: 'unauthorized' }",
-			429: "{ error: 'rate limited' }",
+			429: "{ error: 'rate limited; retry in <seconds> seconds' }",
 			500: "{ error: 'server error' }",
 			503: "{ error: 'Analysis unavailable' }",
 		},

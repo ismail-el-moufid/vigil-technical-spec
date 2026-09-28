@@ -76,7 +76,34 @@ test("path-only validation errors name the id field", () =>
 test("GET /api/setup declares a contextual rate-limit response", () =>
 {
 	assert.equal(response("ep-setup-status", 429),
-		envelope(429, "/api/setup", "{ message: 'rate limited' }"));
+		envelope(429, "/api/setup", "{ message: 'rate limited; retry in <seconds> seconds' }"));
+});
+
+test("rate-limit responses combine the reason and retry delay in one message", () =>
+{
+	for (const endpoint of spec.ENDPOINTS.filter((entry) => entry.response?.[429]))
+	{
+		assert.equal(endpoint.response[429], envelope(429, endpoint.route,
+			"{ message: 'rate limited; retry in <seconds> seconds' }"));
+	}
+	assert.equal(response("ep-alerts-ws", "rateLimited"),
+		"{ type: 'error', message: 'rate limited; retry in <seconds> seconds' }");
+	assert.match(JSON.stringify(spec.RATE_LIMITING_INFO), /Do not send a Retry-After header or a separate retry field/);
+});
+
+test("first-admin setup creates the persisted API-key admin in the same transaction", () =>
+{
+	const setup = spec.ENDPOINTS.find((entry) => entry.id === "ep-auth-setup");
+	const criteria = setup.constraints.criteria.join(" ");
+	assert.match(criteria, /two users rows are inserted atomically/);
+	assert.match(criteria, /mustbe@api.email.*cryptographically random password.*salted bcrypt hash.*role admin/);
+	assert.match(criteria, /session row and one refresh_tokens row are created for the human admin only/);
+	assert.match(criteria, /mustbe@api.email is reserved/);
+	const strategy = spec.AUTH_STRATEGIES.API_KEY.items.join(" ");
+	assert.match(strategy, /SecurityContext principal/);
+	assert.match(strategy, /Before setup creates the user, API-key authentication cannot succeed/);
+	assert.doesNotMatch(strategy, /Not tied to a users row|ADMIN-equivalent/);
+	assert.doesNotMatch(spec.ROLE_ENFORCEMENT_INFO.note.text, /no role of its own/);
 });
 
 test("setup, login and refresh issue a readable hint alongside the HttpOnly refresh token", () =>
