@@ -683,6 +683,17 @@ function PageCard({
 						))}
 					</div>
 					<p className="page-desc">{page.desc}</p>
+					{page.requirements?.length > 0 && (
+						<div>
+							<div className="ep-section-head">Page requirements</div>
+							{page.requirements.map((requirement) => (
+								<div className="gw-row-item" key={requirement}>
+									<span className="gw-row-dot">·</span>
+									<span className="constraint-text">{requirement}</span>
+								</div>
+							))}
+						</div>
+					)}
 					{eps.length === 0 ? (
 						<div className="static-page-msg">
 							{excludeEpId

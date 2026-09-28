@@ -241,12 +241,21 @@ export const TELEMETRY_ENDPOINTS =
 		{
 			query:
 			[
-				{ name: "service",  type: "string", required: false },
+				{
+				   name: "name",
+				   type: "string (exact OTel service.name; takes precedence over service when both are supplied; provided empty name returns 400)",
+				   required: false
+				},
+				{
+				   name: "service",
+				   type: "string (backward-compatible alias for name; omitting both leaves service unfiltered)",
+				   required: false
+				},
 				{ name: "severity", type: "string", required: false },
 				{
 				   name: "token",
 				   type: {
-				      text: "string (the only auth channel for this connection — native EventSource cannot set an Authorization header, so this must be present or the Upgrade is rejected; same requirement as the alerts WS handshake token)",
+				      text: "string (the only auth channel for this connection — native EventSource cannot set an Authorization header, so this must be present or the initial HTTP GET is rejected; same requirement as the alerts WS handshake token)",
 				      refs: ["ep-alerts-ws"]
 				   },
 				   required: true
@@ -265,6 +274,12 @@ export const TELEMETRY_ENDPOINTS =
 			criteria:
 			[
 				"Frame shape identical to single REST log record",
+				"Shared onboarding contract for logs/live, traces/live and metrics/live: subscribe to all three concurrently with URL-encoded name and access token query values (?name=...&token=...); name identifies exact OTel service.name, not a span or metric name. Keep optional signal-specific filters omitted for onboarding.",
+				"Only an actual telemetry record whose service exactly matches the active name in the current onboarding session counts as detection; any one of logs, traces or metrics is sufficient. Connection open events, heartbeats and stale callbacks or success from a previous name/session never count.",
+				"Delivery is best-effort with no replay guarantee after disconnect; onboarding waits for newly arriving telemetry, not historical records, and absence of an event is not proof that instrumentation failed.",
+				"Close all three EventSource connections and cancel pending timers/retries on name change, session reset, success or unmount; reset detection state for each new name/session and ignore callbacks from obsolete sessions. Debounce name edits before opening streams and back off reconnect/open attempts rather than stacking new streams on automatic EventSource retries.",
+				"All three initial HTTP GETs and subsequent reconnects share the DEFAULT bucket (10 tokens, +10/60s, keyed by client IP) with other requests; one three-stream opening consumes three tokens, not three independent budgets. Coordinate retries across signals to avoid exhausting this shared budget.",
+				"Native EventSource error callbacks do not expose readable HTTP status or response bodies: show actionable connection guidance (check authentication, the service name and telemetry setup; retry with backoff) without claiming a specific 400, 401 or 429 from the callback. Coordinated access-token refresh and reopening all three streams with the updated token follow the gateway auth contract, not independent per-signal refresh loops.",
 			],
 			security: [
 				"Token passed as ?token= query param since native EventSource cannot set headers — accepted tradeoff for this project; token lands in server access logs and browser history. Same token as the Authorization header carries, still short-lived."
@@ -290,11 +305,20 @@ export const TELEMETRY_ENDPOINTS =
 		{
 			query:
 			[
-				{ name: "service", type: "string", required: false },
+				{
+				   name: "name",
+				   type: "string (exact OTel service.name; takes precedence over service when both are supplied; provided empty name returns 400)",
+				   required: false
+				},
+				{
+				   name: "service",
+				   type: "string (backward-compatible alias for name; omitting both leaves service unfiltered)",
+				   required: false
+				},
 				{
 				   name: "token",
 				   type: {
-				      text: "string (the only auth channel for this connection — native EventSource cannot set an Authorization header, so this must be present or the Upgrade is rejected; same requirement as the alerts WS handshake token)",
+				      text: "string (the only auth channel for this connection — native EventSource cannot set an Authorization header, so this must be present or the initial HTTP GET is rejected; same requirement as the alerts WS handshake token)",
 				      refs: ["ep-alerts-ws"]
 				   },
 				   required: true
@@ -313,6 +337,10 @@ export const TELEMETRY_ENDPOINTS =
 			criteria:
 			[
 				"Frame shape identical to single REST trace record",
+				{
+					text: "Shared onboarding subscription, detection, lifecycle, retry-budget and error/auth handling criteria apply across all three live signals; see logs/live",
+					refs: ["ep-telemetry-logs-live"],
+				},
 			],
 			security: [
 				"Token passed as ?token= query param since native EventSource cannot set headers — accepted tradeoff for this project; token lands in server access logs and browser history. Same token as the Authorization header carries, still short-lived."
@@ -339,11 +367,20 @@ export const TELEMETRY_ENDPOINTS =
 		{
 			query:
 			[
-				{ name: "service", type: "string", required: false },
+				{
+				   name: "name",
+				   type: "string (exact OTel service.name; takes precedence over service when both are supplied; provided empty name returns 400)",
+				   required: false
+				},
+				{
+				   name: "service",
+				   type: "string (backward-compatible alias for name; omitting both leaves service unfiltered)",
+				   required: false
+				},
 				{
 				   name: "token",
 				   type: {
-				      text: "string (the only auth channel for this connection — native EventSource cannot set an Authorization header, so this must be present or the Upgrade is rejected; same requirement as the alerts WS handshake token)",
+				      text: "string (the only auth channel for this connection — native EventSource cannot set an Authorization header, so this must be present or the initial HTTP GET is rejected; same requirement as the alerts WS handshake token)",
 				      refs: ["ep-alerts-ws"]
 				   },
 				   required: true
@@ -362,6 +399,10 @@ export const TELEMETRY_ENDPOINTS =
 			criteria:
 			[
 				"Frame shape identical to single REST metric record",
+				{
+					text: "Shared onboarding subscription, detection, lifecycle, retry-budget and error/auth handling criteria apply across all three live signals; see logs/live",
+					refs: ["ep-telemetry-logs-live"],
+				},
 			],
 			security: [
 				"Token passed as ?token= query param since native EventSource cannot set headers — accepted tradeoff for this project; token lands in server access logs and browser history. Same token as the Authorization header carries, still short-lived."

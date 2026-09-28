@@ -9,6 +9,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import formatShape from "../src/utils/formatShape.js";
 import * as spec from "../src/data/index.js";
 import { ARCHITECTURE_SECTIONS } from "../src/data/architecture.js";
+import { PAGES } from "../src/data/pages.js";
 
 function response(id, status, endpoints = spec.ENDPOINTS)
 {
@@ -104,6 +105,67 @@ test("first-admin setup creates the persisted API-key admin in the same transact
 	assert.match(strategy, /Before setup creates the user, API-key authentication cannot succeed/);
 	assert.doesNotMatch(strategy, /Not tied to a users row|ADMIN-equivalent/);
 	assert.doesNotMatch(spec.ROLE_ENFORCEMENT_INFO.note.text, /no role of its own/);
+});
+
+test("onboarding defines post-setup navigation, lifecycle and filtered view links", () =>
+{
+	const page = PAGES.find((entry) => entry.id === "page-onboarding");
+	assert.ok(page);
+	assert.equal(page.path, "/onboarding");
+	assert.match(page.desc, /Admin-only/);
+	for (const id of ["ep-config-keys", "ep-telemetry-traces-live", "ep-telemetry-logs-live", "ep-telemetry-metrics-live", "ep-auth-refresh", "ep-auth-logout"])
+	{
+		assert.ok(page.endpointIds.includes(id), `Onboarding must reference ${id}`);
+		assert.ok(spec.ENDPOINTS.some((entry) => entry.id === id));
+	}
+	const requirements = page.requirements.join(" ");
+	assert.match(requirements, /independently of key loading and configuration copying/);
+	assert.match(requirements, /Empty name means idle with no live connections/);
+	assert.match(requirements, /any one stream/);
+	assert.match(requirements, /invalidate the old monitoring session/);
+	assert.match(requirements, /retain the deployment ingestion key/);
+	assert.match(requirements, /traces-only, logs-only and metrics-only each detect success/);
+	for (const signal of ["traces", "logs", "metrics"])
+	{
+		assert.ok(requirements.includes(`/${signal}?service=<encodedServiceName>`));
+		assert.match(PAGES.find((entry) => entry.id === `page-${signal}`).desc, /Accepts \?service=/);
+	}
+	const setup = spec.ENDPOINTS.find((entry) => entry.id === "ep-auth-setup");
+	assert.match(setup.constraints.criteria.join(" "), /After a 201 response.*navigates to \/onboarding/);
+});
+
+test("live telemetry supports name with a compatible service alias and required read token", () =>
+{
+	for (const signal of ["traces", "logs", "metrics"])
+	{
+		const endpoint = spec.ENDPOINTS.find((entry) => entry.id === `ep-telemetry-${signal}-live`);
+		assert.equal(endpoint.method, "SSE");
+		const params = endpoint.request.query;
+		assert.match(params.find((param) => param.name === "name").type, /exact OTel service.name.*takes precedence.*empty name returns 400/);
+		assert.match(params.find((param) => param.name === "service").type, /backward-compatible alias/);
+		assert.equal(params.find((param) => param.name === "token").required, true);
+		assert.match(JSON.stringify(endpoint.constraints.realtime), /no replay guarantee/);
+	}
+	const criteria = spec.ENDPOINTS.find((entry) => entry.id === "ep-telemetry-logs-live").constraints.criteria.join(" ");
+	assert.match(criteria, /any one of logs, traces or metrics is sufficient/);
+	assert.match(criteria, /heartbeats and stale callbacks/);
+	assert.match(criteria, /one three-stream opening consumes three tokens/);
+	assert.match(JSON.stringify(spec.AUTH_STRATEGIES.JWT.items), /single in-flight session refresh shared across subscribers/);
+});
+
+test("onboarding configuration uses the ingestion key without a demo fallback", () =>
+{
+	const endpoint = spec.ENDPOINTS.find((entry) => entry.id === "ep-config-keys");
+	assert.equal(endpoint.requiredRole, "ADMIN");
+	const criteria = JSON.stringify(endpoint.constraints.criteria);
+	for (const variable of ["OTEL_SERVICE_NAME", "OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_EXPORTER_OTLP_PROTOCOL", "OTEL_EXPORTER_OTLP_HEADERS"])
+	{
+		assert.ok(criteria.includes(variable));
+	}
+	assert.match(criteria, /never substitute a demo key/);
+	assert.match(criteria, /returned api_key is not included/);
+	const deployment = ARCHITECTURE_SECTIONS.find((section) => section.id === "deployment");
+	assert.ok(deployment.items.some((item) => item.title === "Onboarding OTLP address" && item.text.includes("/v1/traces")));
 });
 
 test("setup, login and refresh issue a readable hint alongside the HttpOnly refresh token", () =>

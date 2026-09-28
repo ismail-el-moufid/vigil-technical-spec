@@ -117,6 +117,10 @@ export const ARCHITECTURE_SECTIONS =
 				"text": "One Spring Boot backend, the Collector and the databases communicate over private container networks on a trusted host. The backend internal port and database ports are not published to the host or public network. PostgreSQL and ClickHouse use persistent volumes. In-memory watchdog and socket registries belong to this single-instance topology."
 			},
 			{
+				"title": "Onboarding OTLP address",
+				"text": "The deployment-origin address offered by onboarding must expose /v1/traces, /v1/logs and /v1/metrics to the Collector OTLP/HTTP receiver, preserving the Authorization: Bearer ingestion_key header for its bearertokenauth check. These are Collector ingestion routes, not Spring Boot telemetry-read API routes. Deployment routing must support them before advertising the origin as a working exporter endpoint; a page-local custom address may instead identify another reachable ingress for the same Collector. Use HTTPS across untrusted networks and never forward an ingestion key to an unrelated deployment. The custom exporter address changes application exports only; browser configuration-key and live-read requests remain on the authenticated current deployment. Verify routing with an actual instrumented export, not merely an HTTP reachability response."
+			},
+			{
 				"title": "Internal transport",
 				"text": "The same-host callback uses network isolation without an additional callback credential or internal TLS. This boundary is limited to trusted containers on the same host; moving internal traffic across hosts or untrusted networks requires TLS and authenticated service access before deployment."
 			},

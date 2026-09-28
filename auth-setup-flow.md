@@ -63,4 +63,25 @@ Successful first-admin setup atomically creates two `users` rows: the human admi
 
 Rate-limit responses put both the reason and retry delay in one message: `rate limited; retry in <seconds> seconds`, with the wait rounded up to whole seconds. HTTP `429` uses `error.message` in the contextual error envelope; WebSocket rate-limit errors use `message` and leave the connection open. Neither uses a separate retry field, and HTTP does not send a `Retry-After` header.
 
+## After successful first-admin creation
+
+```mermaid
+flowchart LR
+    Setup["POST /api/setup returns 201"] --> Token["Store admin access token in memory"]
+    Token --> Onboarding["Open /onboarding"]
+    Onboarding --> Config["Fetch ingestion_key and generate OTEL configuration"]
+    Onboarding --> Live["Listen to all three live telemetry streams for the entered service"]
+    Live --> Detected["Any matching telemetry record marks detection"]
+    Detected --> Actions["Reveal telemetry views and Add another service"]
+    linkStyle default stroke:white;
+```
+
+- `/onboarding` is an authenticated admin page; admins may revisit it. Reload restores the session through the existing guard and stays on onboarding. No persisted onboarding-completion flag is introduced.
+- `setup_required` becomes false when account creation commits, not when telemetry arrives. Waiting, resetting, or leaving onboarding never reopens initial setup.
+- `GET /api/config/keys` uses the admin access token. Only `ingestion_key` is embedded in the application's OTLP configuration; missing keys or request failures block configuration copying with no demo-key fallback.
+- Open `/api/telemetry/traces/live`, `/api/telemetry/logs/live`, and `/api/telemetry/metrics/live` concurrently with `?name=<encodedServiceName>&token=<encodedAccessToken>`. The live `name` filter identifies OTel `service.name`; `service` remains a compatible alias. Never use the ingestion key for these reads.
+- Monitoring starts independently of configuration copying and key loading. Remain waiting until an actual record for the active name arrives on any stream. Heartbeats, open events, empty payloads and stale callbacks do not count. Delivery is best-effort without replay, so users may need to generate more activity after reconnecting.
+- At access-token expiry, close streams and use one coordinated refresh, not three competing requests. Reopen only the active session with the new token. Native EventSource errors do not reveal HTTP statuses; do not treat every connection failure as a 401. Coordinate reconnect backoff because each stream opening consumes the shared rate-limit budget.
+- Success reveals `/traces?service=<encodedServiceName>`, `/logs?service=<encodedServiceName>`, `/metrics?service=<encodedServiceName>`, and Add another service. Reset cancels streams/retries, invalidates old callbacks, clears inputs and success state, restores the default address, retains the deployment key, and focuses the empty service input. A new non-empty name starts a fresh waiting session. Leaving the page also cleans up streams and retries.
+
 The token's local expiry check is only a frontend shortcut; the backend still validates it on protected requests.

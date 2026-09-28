@@ -10,11 +10,41 @@ export const PAGES =
 	{
 		name: "Setup",
 		path: "/setup",
-		desc: "First-boot admin account creation, shown only before any user exists. Enforcement lives server-side",
+		desc: "First-boot admin account creation, shown only before any user exists. Enforcement lives server-side. A successful POST /api/setup stores the returned access token in memory and opens /onboarding.",
 		role: "Frontend Lead",
 		group: "Auth",
 		endpointIds: ["ep-setup-status", "ep-auth-setup"],
 		id: "page-setup",
+	},
+	{
+		name: "Onboarding",
+		path: "/onboarding",
+		desc: "Admin-only telemetry onboarding after successful first-admin creation. Generate application configuration, wait for live telemetry from the entered service, then explore telemetry or add another service. Authenticated admins may revisit this route; no persisted onboarding-completion flag or service-registration endpoint is required.",
+		role: "Frontend Lead + Telemetry Engineer",
+		group: "Auth",
+		requirements:
+		[
+			"Access and reload: require an authenticated admin. Restore the session through the existing auth guard on reload and remain on /onboarding; show access denied for viewers. setup_required describes account creation only and never depends on telemetry detection.",
+			"Inputs: trim the service name and require a non-empty value. Default the VIGIL address to the current deployment origin; allow a page-local override. Require an absolute HTTP(S) URL without embedded credentials, query or fragment, and normalize trailing slashes. Warn that localhost is not reachable from remote service machines. Invalid inputs block configuration copying.",
+			"Configuration: fetch GET /api/config/keys using the admin access token; generate the four OTEL environment variables defined by that endpoint. Show SDK installation, copy, apply, restart and service-activity instructions. Re-render on input/key changes, safely encode values for the displayed shell format, and render user input as text rather than HTML. Clipboard failure offers manual copying. A reachability command runs from the service network; an HTTP response is not proof of telemetry ingestion.",
+			"Monitoring: independently of key loading and configuration copying, debounce a non-empty service name and concurrently open traces/live, logs/live and metrics/live using URL-encoded name and access token query values. Empty name means idle with no live connections. Keep the waiting state until an actual record for the active service arrives on any one stream; open events, heartbeats, empty payloads and stale-session events never count.",
+			"Success: mark telemetry detected once, close detection streams and reveal View traces, View logs, View metrics and Add another service. All three view links appear even when only one signal has arrived. Navigate to /traces?service=<encodedServiceName>, /logs?service=<encodedServiceName> or /metrics?service=<encodedServiceName> so each view starts filtered to this service.",
+			"Add another service: cancel streams, retries and timers; invalidate the old monitoring session; clear the service name and custom address input; restore the deployment-origin address; hide the custom editor, reachability block, errors and success actions; retain the deployment ingestion key in memory; focus the empty service-name input. Do not connect again until a new non-empty name is entered. This resets page state, not backend telemetry or setup_required.",
+			"Lifecycle and errors: name edits invalidate the old session immediately, with stream opening debounced; cleanup also runs on reset, success and navigation away. Retry only failed streams with coordinated backoff, preserve healthy streams and respect the shared opening rate limit. Coordinate token refresh across streams through the auth guard. No telemetry or elapsed time never implies success; show troubleshooting and explain that best-effort SSE has no historical replay, so users may need to generate more activity.",
+			"Acceptance checks: traces-only, logs-only and metrics-only each detect success. Wrong-service records, heartbeats, empty events and old-session callbacks do not. Missing/failed key loading blocks copy without blocking monitoring. Reset and rapid edits cannot leak streams or accept old events. Token expiry uses one shared refresh, connection failures retain waiting, view links preserve the service filter, and reload never reopens first-admin creation after successful setup.",
+		],
+		endpointIds:
+		[
+			"ep-config-keys",
+			"ep-telemetry-traces-live",
+			"ep-telemetry-logs-live",
+			"ep-telemetry-metrics-live",
+			"ep-auth-refresh",
+			"ep-setup-status",
+			"ep-auth-logout",
+			"ep-alerts-ws",
+		],
+		id: "page-onboarding",
 	},
 	{
 		name: "Login",
@@ -52,7 +82,7 @@ export const PAGES =
 	{
 		name: "Logs",
 		path: "/logs",
-		desc: "Infinite scroll log viewer with text search, severity filters, sorting, and CSV export.",
+		desc: "Infinite scroll log viewer with text search, severity filters, sorting, and CSV export. Accepts ?service=<encodedServiceName> from onboarding to initialize the service filter for REST and live requests; live requests may use the service alias.",
 		role: "Frontend Lead + Telemetry Engineer",
 		group: "Telemetry",
 		endpointIds:
@@ -67,7 +97,7 @@ export const PAGES =
 	{
 		name: "Traces",
 		path: "/traces",
-		desc: "Infinite scroll trace viewer with period and service filters, sorting, and CSV export.",
+		desc: "Infinite scroll trace viewer with period and service filters, sorting, and CSV export. Accepts ?service=<encodedServiceName> from onboarding to initialize the service filter for REST and live requests; live requests may use the service alias.",
 		role: "Frontend Lead + Telemetry Engineer",
 		group: "Telemetry",
 		endpointIds:
@@ -82,7 +112,7 @@ export const PAGES =
 	{
 		name: "Metrics",
 		path: "/metrics",
-		desc: "Interactive charts with live updates, infinite scroll, filters, and CSV export.",
+		desc: "Interactive charts with live updates, infinite scroll, filters, and CSV export. Accepts ?service=<encodedServiceName> from onboarding to initialize the service filter for REST and live requests; live requests may use the service alias.",
 		role: "Frontend Lead + Telemetry Engineer",
 		group: "Telemetry",
 		endpointIds:
