@@ -190,7 +190,7 @@ export const RATE_LIMITING_INFO =
 		[
 			"Capacity: 10 tokens. Refill: +10 every 60 s.",
 			"Keyed by client IP — shared bucket across all endpoints for that IP, not one bucket per route",
-			"429 Too Many Requests on exhaustion, with error.message combining the reason and retry delay: 'rate limited; retry in <seconds> seconds'. Replace <seconds> with the positive whole-second wait until the bucket permits another request, rounding up. Do not send a Retry-After header or a separate retry field. Over-limit WebSocket ack frames use the same combined text in message and keep the connection open",
+			"429 Too Many Requests on exhaustion, with a plain string response combining the reason and retry delay: 'rate limited; retry in <seconds> seconds'. Replace <seconds> with the positive whole-second wait until the bucket permits another request, rounding up. Do not send a Retry-After header or a separate retry field. Over-limit WebSocket ack frames use the same combined text in message and keep the connection open",
 			"Rate check runs before auth — an exhausted IP never reaches AuthFilter",
 			"Bucket counts requests, not rows: GET ?format=csv on the telemetry endpoints (metrics/traces/logs) ignores pagination and returns the full matching dataset as one unpaginated text/csv response, but still consumes exactly one token, same as a normal small page — this is what makes CSV export viable without a separate rate-limit carve-out",
 			"Known simplification: a single page load can consume several tokens at once (e.g. Overview: 3 REST GETs + 3 SSE upgrades = 6 of 10), and the bucket is shared per-IP, so multiple users behind the same NAT/proxy draw from the same 10. Acceptable for project scope; a production system would key per-user and/or size buckets per-route.",
@@ -255,7 +255,7 @@ export const ROLE_ENFORCEMENT_INFO =
 				"All telemetry reads · GET + PATCH /api/users/me",
 				"POST /api/llm/analyze · all SSE streams",
 				{
-					text: "GET /api/alerts · GET /api/alerts/rules · PUT /api/alerts/{id}",
+					text: "GET /api/alerts · GET /api/alerts/rules · PUT /api/alerts/ack/{id}",
 					refs: ["ep-alerts-list", "ep-alert-rules-list", "ep-alert-ack"],
 				},
 				{

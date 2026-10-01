@@ -27,8 +27,8 @@ export const ALERT_ENDPOINTS =
 				"Web Major Real-time features",
 				"single connection handles both push and acknowledgment",
 				"Token validated at the HTTP Upgrade via a HandshakeInterceptor — the token is passed as ?token= on the upgrade request (native WebSocket clients can't set an Authorization header any more than EventSource can) and the connection is rejected outright during the HTTP Upgrade if it's invalid or missing, so there's no post-connect auth window, no auth frame, and no auth-timeout error frame; on token expiry the client just reconnects with a fresh one, no mid-session re-auth frames",
-				"ack frame calls the same service method as PUT /api/alerts/{id} then broadcasts 'status' frame to ALL connected sessions",
-				"PUT /api/alerts/{id} REST endpoint retained for API-key clients; it also broadcasts via the in-memory WebSocketSession registry",
+				"ack frame calls the same service method as PUT /api/alerts/ack/{id} then broadcasts 'status' frame to ALL connected sessions",
+				"PUT /api/alerts/ack/{id} REST endpoint retained for API-key clients; it also broadcasts via the in-memory WebSocketSession registry",
 				"Acks are per-user: each user's read/ack state on an alert is tracked independently in alert_acks, not as a single shared status on the alert",
 			],
 			security:
@@ -170,6 +170,7 @@ export const ALERT_ENDPOINTS =
 			query: [],
 			body:
 			[
+				{ name: "service", type: "string", required: true },
 				{ name: "signal_type", type: "logs | metrics | traces", required: true },
 				{
 				   name: "metric_name",
@@ -287,7 +288,7 @@ export const ALERT_ENDPOINTS =
 				},
 				"400 returned if aggregation is present and the target row's signal_type is logs | traces (aggregation is only settable on metrics rules), or if aggregation is present but not one of the fixed enum when signal_type = metrics",
 				"400 returned if window_seconds is present but non-numeric, non-integer, or less than 10",
-				"Both 403 causes share the status code but carry distinct 'code' values (ADMIN_REQUIRED vs DEFAULT_RULE_PROTECTED) — clients should branch on 'code', not on the 'error' message text",
+				"Both 403 causes share the status code but return different string messages; there is no structured error code",
 				"400 returned if the {id} path segment isn't a syntactically valid UUID — malformed path params are rejected the same way as malformed body fields above, not left to fall through to an unhandled 500 or a misleading 404",
 			],
 			security: [
@@ -327,7 +328,7 @@ export const ALERT_ENDPOINTS =
 		constraints: {
 			criteria: [
 				"If is_default: true on the target row, request is rejected with 403 — default rules cannot be deleted, only disabled via PATCH { enabled: false }",
-				"Both 403 causes share the status code but carry distinct 'code' values (ADMIN_REQUIRED vs DEFAULT_RULE_PROTECTED) — clients should branch on 'code', not on the 'error' message text",
+				"Both 403 causes share the status code but return different string messages; there is no structured error code",
 				"Deleting a non-default rule cascades into alert_history: every row whose rule_id referenced this rule has rule_id set to NULL (schema-level ON DELETE SET NULL). Those rows' snapshotted metric_name/threshold/severity/etc. are untouched — only rule_id changes. This produces the same null-rule_id shape as a silence-watchdog alert; consumers distinguish the two by metric_name, not rule_id — metric_name === 'service_silent' is the silence-watchdog case, any other metric_name with rule_id === null is this deleted-rule case",
 				"400 returned if the {id} path segment isn't a syntactically valid UUID — malformed path params are rejected the same way as malformed query params or body fields elsewhere in this spec, not left to fall through to an unhandled 500 or a misleading 404",
 			],
@@ -344,7 +345,7 @@ export const ALERT_ENDPOINTS =
 		id: "ep-alert-rules-delete",
 	},
 	{
-		route: "/api/alerts/{id}",
+		route: "/api/alerts/ack/{id}",
 		service: "Spring Boot + PostgreSQL",
 		owner: "Backend Lead",
 		method: "PUT",

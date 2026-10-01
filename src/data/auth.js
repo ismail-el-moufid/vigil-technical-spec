@@ -50,7 +50,7 @@ export const AUTH_ENDPOINTS =
 		},
 		response:
 		{
-			200: "{ setup_required: true | false }",
+			200: "true | false — setupRequired (raw JSON boolean)",
 			429: "{ timestamp: '<iso8601>', status: 429, path: '/api/setup', error: { message: 'rate limited; retry in <seconds> seconds' } }",
 			500: "{ timestamp: '<iso8601>', status: 500, path: '/api/setup', error: { message: 'server error' } }",
 		},
@@ -112,9 +112,9 @@ export const AUTH_ENDPOINTS =
 				SESSION_HINT_PURPOSE,
 				"Hashed/salted passwords",
 				"Frontend + backend validation",
-				"mustbe@api.email is reserved for the API-key user; submitting it as the human admin email returns 400 with an error.email validation message",
+				"mustbe@api.email is reserved for the API-key user; submitting it as the human admin email returns 400 with a validation message",
 				"400 returned if email is missing, not a string, or not a well-formed email address, or if password is missing, not a string, or does not meet the password-strength pattern",
-				"Validation failures use the contextual error envelope: timestamp, status, and path identify the failed request; error maps each invalid field to its specific validation message",
+				"Validation failures return a string message rather than a contextual error envelope or field-error map",
 				"Server checks the in-memory setup_required flag before creation — false returns 409 without a users-table existence read. First-admin creation is serialized in-process so only one concurrent setup request can proceed while the flag is true",
 				"On the non-409 path, two users rows are inserted atomically: the human admin with the submitted email/password and a separate API-key user with email mustbe@api.email, a cryptographically random password stored only as a salted bcrypt hash, and role admin (ADMIN authority). One session row and one refresh_tokens row are created for the human admin only; the returned access token and cookies belong to that human admin. The generated API-key user password is not returned or logged. Only after that transaction commits is setup_required flipped to false in memory",
 				"A restart reconstructs setup_required with the single boot-time users existence query, so the cached value is not treated as durable state",

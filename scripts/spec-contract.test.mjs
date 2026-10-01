@@ -18,13 +18,8 @@ function response(id, status, endpoints = spec.ENDPOINTS)
 	return endpoint.response[status];
 }
 
-function envelope(status, path, error, code)
-{
-	const codeField = code === undefined ? "" : `, code: '${code}'`;
-	return `{ timestamp: '<iso8601>', status: ${status}, path: '${path}', error: ${error}${codeField} }`;
-}
 
-for (const { id, route, status, alternatives } of [
+for (const { id, status, alternatives } of [
 	{
 		id: "ep-users-update",
 		route: "/api/users/{id}",
@@ -56,36 +51,42 @@ for (const { id, route, status, alternatives } of [
 {
 	test(`${id} preserves every ${status} error alternative`, () =>
 	{
-		const expected = alternatives.map(([message, code]) =>
-			envelope(status, route, `{ message: '${message}' }`, code)).join(" | ");
-		assert.equal(response(id, status), expected);
+		assert.equal(response(id, status), alternatives.map(([message]) => message).join(" | "));
 	});
 }
 
 test("path-only validation errors name the id field", () =>
 {
-	for (const [id, route] of [
+	for (const [id] of [
 		["ep-auth-sessions-revoke", "/api/auth/sessions/{id}"],
 		["ep-users-delete", "/api/users/{id}"],
 		["ep-alert-rules-delete", "/api/alerts/rules/{id}"],
 	])
 	{
-		assert.equal(response(id, 400), envelope(400, route, "{ id: '<validation message>' }"));
+		assert.equal(response(id, 400), "<validation message>");
 	}
 });
 
-test("GET /api/setup declares a contextual rate-limit response", () =>
+test("setup routes return a boolean status and string errors", () =>
 {
-	assert.equal(response("ep-setup-status", 429),
-		envelope(429, "/api/setup", "{ message: 'rate limited; retry in <seconds> seconds' }"));
+	assert.equal(response("ep-setup-status", 200), "true | false — setupRequired (raw JSON boolean)");
+	assert.equal(response("ep-setup-status", 429), "rate limited; retry in <seconds> seconds");
+	assert.equal(spec.ENDPOINTS.find((entry) => entry.id === "ep-auth-setup").route, "/api/setup");
+});
+
+test("alert acknowledgment route and rule creation body match the backend", () =>
+{
+	assert.equal(spec.ENDPOINTS.find((entry) => entry.id === "ep-alert-ack").route, "/api/alerts/ack/{id}");
+	const create = spec.ENDPOINTS.find((entry) => entry.id === "ep-alert-rules-create");
+	assert.deepEqual(create.request.body.find((field) => field.name === "service"),
+		{ name: "service", type: "string", required: true });
 });
 
 test("rate-limit responses combine the reason and retry delay in one message", () =>
 {
 	for (const endpoint of spec.ENDPOINTS.filter((entry) => entry.response?.[429]))
 	{
-		assert.equal(endpoint.response[429], envelope(429, endpoint.route,
-			"{ message: 'rate limited; retry in <seconds> seconds' }"));
+		assert.equal(endpoint.response[429], "rate limited; retry in <seconds> seconds");
 	}
 	assert.equal(response("ep-alerts-ws", "rateLimited"),
 		"{ type: 'error', message: 'rate limited; retry in <seconds> seconds' }");
@@ -211,7 +212,7 @@ const sourceEndpoints = Object.entries(spec)
 	.filter(([name]) => name.endsWith("_ENDPOINTS"))
 	.flatMap(([, endpoints]) => endpoints);
 
-test("already-contextual envelopes are unchanged", () =>
+test("contextual source errors publish string messages", () =>
 {
 	let checked = 0;
 	for (const endpoint of sourceEndpoints)
@@ -220,7 +221,8 @@ test("already-contextual envelopes are unchanged", () =>
 		{
 			if (typeof value === "string" && value.startsWith("{ timestamp:"))
 			{
-				assert.equal(response(endpoint.id, status), value, `${endpoint.id}: ${status}`);
+				assert.equal(typeof response(endpoint.id, status), "string", `${endpoint.id}: ${status}`);
+				assert.ok(!response(endpoint.id, status).startsWith("{"), `${endpoint.id}: ${status}`);
 				checked++;
 			}
 		}
@@ -244,7 +246,7 @@ test("successful responses, cookie metadata and stream frames are unchanged", ()
 
 test("extra contract shapes normalize through exported ENDPOINTS", async (t) =>
 {
-	const suffix = " — branch on code; { error: 'example only' } is explanatory text.";
+	const suffix = " — { error: 'example only' } is explanatory text.";
 	const route = "/api/spec-test/{id}/{scope}/{id}/{parent_id}";
 	const fixtures = [
 		{
@@ -258,7 +260,7 @@ test("extra contract shapes normalize through exported ENDPOINTS", async (t) =>
 			expected: response("ep-users-update", 409) + suffix,
 		},
 		{
-			name: "deduplicates body/query/path fields and preserves validation alternatives",
+			name: "preserves validation message alternatives without error codes",
 			endpoint: {
 				id: "spec-test-validation",
 				route,
@@ -271,10 +273,7 @@ test("extra contract shapes normalize through exported ENDPOINTS", async (t) =>
 				},
 			},
 			status: 400,
-			expected: [
-				envelope(400, route, "{ id: 'invalid input', email: 'invalid input', scope: 'invalid input', parent_id: 'invalid input' }", "INVALID_INPUT"),
-				envelope(400, route, "{ id: 'missing input', email: 'missing input', scope: 'missing input', parent_id: 'missing input' }", "MISSING_INPUT"),
-			].join(" | "),
+			expected: "invalid input | missing input",
 		},
 	];
 

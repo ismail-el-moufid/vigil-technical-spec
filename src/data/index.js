@@ -23,40 +23,25 @@ export { PAGES }                from "./pages.js";
 export { SCHEMA }               from "./schema.js";
 export { ARCHITECTURE_SECTIONS, ARCHITECTURE_DELIVERY_DIAGRAM } from "./architecture.js";
 
-// Legacy endpoint declarations contain compact `{ error: 'message' }` values.
-// The published contract adds request context to every error, and exposes
-// validation failures as a field-to-message map for direct form consumption.
-function normalizeErrorResponse(endpoint, status, value)
+// HTTP errors carry a string message, not a structured error envelope.
+// Keep the source declarations' explanatory suffixes and 401 cookie metadata.
+function normalizeErrorBody(value)
 {
-	if (typeof value !== "string" || !value.trim().startsWith("{ error:")) return value;
-
-	const fieldNames =
-	[
-	   ...new Set([
-			...(Array.isArray(endpoint.request?.body) ? endpoint.request.body : []),
-			...(Array.isArray(endpoint.request?.query) ? endpoint.request.query : []),
-			...Array.from(endpoint.route.matchAll(/\{([^{}]+)\}/g), (match) => ({
-			   name: match[1]
-			})),
-		].map(({ name }) => name))
-	];
-
-	// Sticky matching stops at explanatory suffixes, leaving any examples in
-	// that text untouched while preserving each leading alternative's details.
-	return value.replace(
-		/(\s*(?:\|\s*)?)\{\s*error:\s*'((?:\\.|[^'\\])*)'(?:\s*,\s*code:\s*'((?:\\.|[^'\\])*)')?\s*\}/gy,
-		(_match, separator, message, code) =>
-		{
-			const error = String(status) === "400"
-				? `{ ${(fieldNames.length ? fieldNames : [
-				   "field"
-				]).map((name) => `${name}: '${message}'`).join(", ")} }`
-				: `{ message: '${message}' }`;
-			const codeField = code === undefined ? "" : `, code: '${code}'`;
-
-			return `${separator}{ timestamp: '<iso8601>', status: ${status}, path: '${endpoint.route}', error: ${error}${codeField} }`;
-		},
-	);
+	if (typeof value !== "string") return value;
+	const alternatives = value.match(/^(?:\s*\{\s*error:\s*'[^']*'(?:,\s*code:\s*'[^']*')?\s*\}(?:\s*\|\s*)?)+/);
+	if (alternatives)
+	{
+		const messages = Array.from(
+			alternatives[0].matchAll(/error:\s*'([^']*)'/g),
+			(match) => match[1]
+		);
+		return messages.join(" | ") + value.slice(alternatives[0].length);
+	}
+	if (!value.startsWith("{ timestamp:")) return value;
+	const message = value.match(/message:\s*'([^']*)'/);
+	if (message) return message[1] + value.slice(value.indexOf("} }", message.index) + 3);
+	const validation = value.match(/error:\s*\{[^}]*?:\s*'([^']*)'/);
+	return validation ? validation[1] + value.slice(value.indexOf("} }", validation.index) + 3) : value;
 }
 
 function normalizeEndpointErrors(endpoint)
@@ -67,7 +52,15 @@ function normalizeEndpointErrors(endpoint)
 		...endpoint,
 		response: Object.fromEntries(
 			Object.entries(endpoint.response).map(([status, value]) =>
-				[status, normalizeErrorResponse(endpoint, status, value)])
+			{
+				if (!/^[45]\d\d$/.test(status)) return [status, value];
+				return [
+				   status,
+				   typeof value === "object" && value !== null
+						? { ...value, body: normalizeErrorBody(value.body) }
+						: normalizeErrorBody(value)
+				];
+			})
 		),
 	};
 }

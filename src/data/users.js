@@ -205,7 +205,7 @@ export const USERS_ENDPOINTS =
 					text: "If role: viewer is requested and the target is currently the only user with role: admin, request is rejected with 409 — same guard as on delete, since demotion is functionally equivalent to removal",
 					refs: ["ep-users-delete"],
 				},
-				"If email is requested and collides with another user's users.email unique constraint, request is rejected with 409 — both 409 causes share the status code but carry distinct 'code' values (LAST_ADMIN vs EMAIL_TAKEN); clients should branch on 'code', not the 'error' message text",
+				"If email is requested and collides with another user's users.email unique constraint, request is rejected with 409 — both 409 causes share the status code but return different string messages; there is no structured error code",
 				{
 					text: "400 returned if email is present but malformed — same well-formed-address check as on create, not a separately-specified rule",
 					refs: ["ep-users-create"],

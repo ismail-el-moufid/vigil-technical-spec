@@ -7,7 +7,7 @@ The frontend should reuse an **unexpired access token** and call refresh only wh
 
 The server sets `session_hint=1` alongside `refresh_token` on setup, login, and successful refresh, with matching 30-day expiry. The hint uses `Secure`, `SameSite=Strict`, and `Path=/`, without `HttpOnly`, so page JavaScript can read it. The actual refresh token stays `HttpOnly` at `Path=/api/auth`. The hint can be stale or edited; it never proves the user is logged in. Logout, current-session revocation, and refresh `401` clear both cookies using their original paths and `Max-Age=0`. Network failures, `429`, and `5xx` do not clear them. Revoking a session in another browser cannot clear that browser's cookies; its next refresh fails and clears them.
 
-Refresh is responsible only for renewing an authenticated session. It does not determine whether initial setup is required. When there is no hint on page load, or refresh returns `401`, the frontend calls the separate unauthenticated `GET /api/setup` endpoint. That endpoint returns `setup_required: true` when initial setup has not been completed and `false` otherwise.
+Refresh is responsible only for renewing an authenticated session. It does not determine whether initial setup is required. When there is no hint on page load, or refresh returns `401`, the frontend calls the separate unauthenticated `GET /api/setup` endpoint. That endpoint returns the raw JSON boolean `true` when initial setup has not been completed and `false` otherwise.
 
 ```mermaid
 flowchart LR
@@ -23,8 +23,8 @@ flowchart LR
         C --- C_401@{ shape: text, label: "401" } --> P
         C --- C_ERROR@{ shape: text, label: "429 or 5xx" } --> H["Show error or retry state"]
         P --- P_NETWORK@{ shape: text, label: "Network failure" } --> H
-        U{"Setup-status response"} --- U_SETUP@{ shape: text, label: "200, setup_required: true" } --> F["Show /setup"]
-        U --- U_LOGIN@{ shape: text, label: "200, setup_required: false" } --> G["Show /login"]
+        U{"Setup-status response"} --- U_SETUP@{ shape: text, label: "200, true" } --> F["Show /setup"]
+        U --- U_LOGIN@{ shape: text, label: "200, false" } --> G["Show /login"]
         U --- U_ERROR@{ shape: text, label: "429 or 5xx" } --> H
     end
 
@@ -39,8 +39,8 @@ flowchart LR
         R_ERROR --> R
 
         N{"Initial setup completed?"}
-        N --- N_NO@{ shape: text, label: "No" } --> ST_SETUP["200 with setup_required: true"]
-        N --- N_YES@{ shape: text, label: "Yes" } --> ST_LOGIN["200 with setup_required: false"]
+        N --- N_NO@{ shape: text, label: "No" } --> ST_SETUP["200 with true"]
+        N --- N_YES@{ shape: text, label: "Yes" } --> ST_LOGIN["200 with false"]
         N --- N_DATABASE@{ shape: text, label: "Database failure" } --> ST_ERROR["5xx"]
         ST_SETUP --> SR["Return setup-status response"]
         ST_LOGIN --> SR
@@ -57,11 +57,11 @@ flowchart LR
 
 An empty cookie value follows the missing-cookie path even if the cookie header is present; the server returns `401` before any database query. A non-empty but invalid, expired, or revoked refresh cookie cannot restore the session: refresh returns an ordinary `401`, after which the frontend queries `/api/setup` and shows `/setup` or `/login` accordingly. Network, rate-limit, and server failures from either request remain error/retry states, not login redirects.
 
-The setup-status endpoint is informational only. The setup-creation endpoint must independently and atomically verify that setup is still allowed so that two clients cannot both create the initial administrator after observing `setup_required: true`. Prefer tracking explicit setup completion state if the backend has such a mechanism; otherwise, the status endpoint can derive it from whether the `users` table is empty.
+The setup-status endpoint is informational only. The setup-creation endpoint must independently and atomically verify that setup is still allowed so that two clients cannot both create the initial administrator after observing `true`. Prefer tracking explicit setup completion state if the backend has such a mechanism; otherwise, the status endpoint can derive it from whether the `users` table is empty.
 
 Successful first-admin setup atomically creates two `users` rows: the human admin from the submitted credentials and a separate API-key user with email `mustbe@api.email`, a cryptographically random password stored only as a salted bcrypt hash, and role `admin` (`ADMIN` authority). That email is reserved from the human setup input. The generated password is never returned or logged; the setup response tokens and cookies belong only to the human admin. API-key authentication acts as the persisted default user, not a roleless admin bypass. The user is created during setup, not during startup key generation.
 
-Rate-limit responses put both the reason and retry delay in one message: `rate limited; retry in <seconds> seconds`, with the wait rounded up to whole seconds. HTTP `429` uses `error.message` in the contextual error envelope; WebSocket rate-limit errors use `message` and leave the connection open. Neither uses a separate retry field, and HTTP does not send a `Retry-After` header.
+Rate-limit responses put both the reason and retry delay in one message: `rate limited; retry in <seconds> seconds`, with the wait rounded up to whole seconds. HTTP `429` returns the combined reason and retry delay as a plain string; WebSocket rate-limit errors use a `message` field and leave the connection open. Neither uses a separate retry field, and HTTP does not send a `Retry-After` header.
 
 ## After successful first-admin creation
 
