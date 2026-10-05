@@ -23,10 +23,10 @@ export const WEBHOOKS_ENDPOINTS =
 		response:
 		{
 			200: "[{ id: '<uuid>', url: '<url>' }]",
-			401: "{ error: 'unauthorized' }",
-			403: "{ error: 'admin role required' }",
-			429: "{ error: 'rate limited; retry in <seconds> seconds' }",
-			500: "{ error: 'server error' }",
+			401: "{ message: 'unauthorized' }",
+			403: "{ message: 'admin role required' }",
+			429: "{ message: 'rate limited; retry in <seconds> seconds' }",
+			500: "{ message: 'server error' }",
 		},
 		group: "Webhooks",
 		tables: ["webhooks"],
@@ -34,7 +34,7 @@ export const WEBHOOKS_ENDPOINTS =
 		constraints: {
 			criteria:
 			[
-				"Unpaginated by design, unlike the telemetry/alerts list endpoints: this is an admin-managed list of registered webhook targets, not a continuously-inserted table, so it's expected to stay small enough that a bare array with no page size, offset, or hasMore is an accepted scope decision rather than an oversight",
+				"Unpaginated by design, unlike the telemetry/alerts list endpoints: this is an admin-managed list of registered webhook targets, not a continuously-inserted table, so it's expected to stay small enough that a bare array with no page size, offset, or has_more is an accepted scope decision rather than an oversight",
 			],
 			security: [],
 			rateLimit: "10 req/min",
@@ -66,12 +66,12 @@ export const WEBHOOKS_ENDPOINTS =
 		response:
 		{
 			201: "{ id: '<uuid>', url: '<url>' }",
-			400: "{ error: '<validation message>' }",
-			401: "{ error: 'unauthorized' }",
-			403: "{ error: 'admin role required' }",
-			409: "{ error: 'webhook url already registered' }",
-			429: "{ error: 'rate limited; retry in <seconds> seconds' }",
-			500: "{ error: 'server error' }",
+			400: "{ message: '<single validation message>' }",
+			401: "{ message: 'unauthorized' }",
+			403: "{ message: 'admin role required' }",
+			409: "{ message: 'webhook url already registered' }",
+			429: "{ message: 'rate limited; retry in <seconds> seconds' }",
+			500: "{ message: 'server error' }",
 		},
 		group: "Webhooks",
 		tables: ["webhooks"],
@@ -82,7 +82,7 @@ export const WEBHOOKS_ENDPOINTS =
 				"409 if url collides with the existing unique constraint on webhooks.url — checked before insert, not left as an unhandled DB constraint violation",
 				"Delivery payload POSTed to url on alert (previously unspecified): { alert_uid: '<alert_history.id>', title: '<severity> alert: <metric_name> on <service>', message: '<llm_analysis>', state: 'alerting', link_to_upstream_details: '<vigil.frontend-base-url>/alerts?id=<alert_history.id>', service, metric_name, threshold: number | null, severity: info | warning | critical, triggered_at, signal_type: logs | metrics | traces | null, window_seconds: number | null, aggregation: string | null }. First five fields match Grafana OnCall's Formatted Webhook inbound integration field-for-field — a url pointed at an OnCall Formatted Webhook URL needs no translation layer (OnCall OSS has been archived since March 2026, grafana/oncall is read-only with development continuing in Grafana Cloud IRM, but the OSS integration endpoint and this payload shape remain usable for self-hosted OnCall). The rest are Vigil-native, appended for receivers that aren't OnCall — signal_type/window_seconds/aggregation are null for silence-watchdog alerts, same reasoning as everywhere else these columns appear",
 				"Fires once, after LLM completion — or after FastAPI's 30-second analysis timeout, at which point Spring Boot writes 'Analysis unavailable' as llm_analysis and proceeds to webhooks anyway — not at initial trigger, since llm_analysis is the payload's message body",
-				"state is always 'alerting', never 'ok': Vigil alerts are closed by a person acknowledging or resolving them (PUT /api/alerts/ack/{id} with { status: acknowledged | resolved }, or the equivalent WS ack frame), not by any automatic condition clearing, so there is no resolve event this pipeline could ever send",
+				"state is always 'alerting', never 'ok': users change shared history through PATCH /api/alerts/history/{id}?status=acknowledged|resolved|sent or the equivalent WS ack action. This webhook pipeline runs only on initial trigger/LLM completion, not on manual history or notification updates; manual resolution/reopening does not send a webhook",
 				"link_to_upstream_details requires a new Spring Boot @ConfigurationProperties value, vigil.frontend-base-url (operator-provided, e.g. the deployed frontend's origin) — nothing else in the spec previously required the backend to know its own frontend's URL",
 			],
 			security: [
@@ -106,12 +106,12 @@ export const WEBHOOKS_ENDPOINTS =
 		response:
 		{
 			204: "Empty response",
-			400: "{ error: '<validation message>' }",
-			401: "{ error: 'unauthorized' }",
-			403: "{ error: 'admin role required' }",
-			404: "{ error: 'webhook not found' }",
-			429: "{ error: 'rate limited; retry in <seconds> seconds' }",
-			500: "{ error: 'server error' }",
+			400: "{ message: '<single validation message>' }",
+			401: "{ message: 'unauthorized' }",
+			403: "{ message: 'admin role required' }",
+			404: "{ message: 'webhook not found' }",
+			429: "{ message: 'rate limited; retry in <seconds> seconds' }",
+			500: "{ message: 'server error' }",
 		},
 		group: "Webhooks",
 		tables: ["webhooks"],

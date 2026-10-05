@@ -9,10 +9,10 @@ export const USERS_ENDPOINTS =
 		response:
 		{
 			200: "[{ id: '<uuid>', email: '<email>', role: admin | viewer }]",
-			401: "{ error: 'unauthorized' }",
-			403: "{ error: 'admin role required' }",
-			429: "{ error: 'rate limited; retry in <seconds> seconds' }",
-			500: "{ error: 'server error' }",
+			401: "{ message: 'unauthorized' }",
+			403: "{ message: 'admin role required' }",
+			429: "{ message: 'rate limited; retry in <seconds> seconds' }",
+			500: "{ message: 'server error' }",
 		},
 		group: "Users",
 		tables: ["users"],
@@ -20,7 +20,7 @@ export const USERS_ENDPOINTS =
 		constraints: {
 			criteria:
 			[
-				"Unpaginated by design, unlike the telemetry/alerts list endpoints: this is an admin-managed directory of provisioned accounts, not a continuously-inserted table, so it's expected to stay small enough that a bare array with no page size, offset, or hasMore is an accepted scope decision rather than an oversight",
+				"Unpaginated by design, unlike the telemetry/alerts list endpoints: this is an admin-managed directory of provisioned accounts, not a continuously-inserted table, so it's expected to stay small enough that a bare array with no page size, offset, or has_more is an accepted scope decision rather than an oversight",
 			],
 			security: [],
 			rateLimit: "10 req/min",
@@ -62,12 +62,12 @@ export const USERS_ENDPOINTS =
 		response:
 		{
 			201: "{ id: '<uuid>', email: '<email>', role: admin | viewer }",
-			400: "{ error: '<validation message>' }",
-			401: "{ error: 'unauthorized' }",
-			403: "{ error: 'admin role required' }",
-			409: "{ error: 'email already registered' }",
-			429: "{ error: 'rate limited; retry in <seconds> seconds' }",
-			500: "{ error: 'server error' }",
+			400: "{ message: '<single validation message>' }",
+			401: "{ message: 'unauthorized' }",
+			403: "{ message: 'admin role required' }",
+			409: "{ message: 'email already registered' }",
+			429: "{ message: 'rate limited; retry in <seconds> seconds' }",
+			500: "{ message: 'server error' }",
 		},
 		group: "Users",
 		tables: ["users"],
@@ -100,9 +100,9 @@ export const USERS_ENDPOINTS =
 		response:
 		{
 			200: "{ id: '<uuid>', email: '<email>', role: admin | viewer }",
-			401: "{ error: 'unauthorized' }",
-			429: "{ error: 'rate limited; retry in <seconds> seconds' }",
-			500: "{ error: 'server error' }",
+			401: "{ message: 'unauthorized' }",
+			429: "{ message: 'rate limited; retry in <seconds> seconds' }",
+			500: "{ message: 'server error' }",
 		},
 		group: "Users",
 		tables: ["users"],
@@ -142,11 +142,11 @@ export const USERS_ENDPOINTS =
 		response:
 		{
 			200: "{ id: '<uuid>', email: '<email>', role: admin | viewer }",
-			400: "{ error: '<validation message>' }",
-			401: "{ error: 'unauthorized' }",
-			409: "{ error: 'email already registered' }",
-			429: "{ error: 'rate limited; retry in <seconds> seconds' }",
-			500: "{ error: 'server error' }",
+			400: "{ message: '<single validation message>' }",
+			401: "{ message: 'unauthorized' }",
+			409: "{ message: 'email already registered' }",
+			429: "{ message: 'rate limited; retry in <seconds> seconds' }",
+			500: "{ message: 'server error' }",
 		},
 		group: "Users",
 		tables: ["users"],
@@ -187,13 +187,13 @@ export const USERS_ENDPOINTS =
 		response:
 		{
 			200: "{ id: '<uuid>', email: '<email>', role: admin | viewer }",
-			400: "{ error: '<validation message>' }",
-			401: "{ error: 'unauthorized' }",
-			403: "{ error: 'admin role required' }",
-			404: "{ error: 'user not found' }",
-			409: "{ error: 'cannot demote the last remaining admin', code: 'LAST_ADMIN' } | { error: 'email already registered', code: 'EMAIL_TAKEN' }",
-			429: "{ error: 'rate limited; retry in <seconds> seconds' }",
-			500: "{ error: 'server error' }",
+			400: "{ message: '<single validation message>' }",
+			401: "{ message: 'unauthorized' }",
+			403: "{ message: 'admin role required' }",
+			404: "{ message: 'user not found' }",
+			409: "{ message: 'cannot demote the last remaining admin' } | { message: 'email already registered' }",
+			429: "{ message: 'rate limited; retry in <seconds> seconds' }",
+			500: "{ message: 'server error' }",
 		},
 		group: "Users",
 		tables: ["users"],
@@ -205,7 +205,7 @@ export const USERS_ENDPOINTS =
 					text: "If role: viewer is requested and the target is currently the only user with role: admin, request is rejected with 409 — same guard as on delete, since demotion is functionally equivalent to removal",
 					refs: ["ep-users-delete"],
 				},
-				"If email is requested and collides with another user's users.email unique constraint, request is rejected with 409 — both 409 causes share the status code but return different string messages; there is no structured error code",
+				"If email is requested and collides with another user's users.email unique constraint, request is rejected with 409 — both 409 causes share the status code but return different message-only JSON bodies; there is no structured error code",
 				{
 					text: "400 returned if email is present but malformed — same well-formed-address check as on create, not a separately-specified rule",
 					refs: ["ep-users-create"],
@@ -232,21 +232,28 @@ export const USERS_ENDPOINTS =
 		response:
 		{
 			204: "Empty response",
-			400: "{ error: '<validation message>' }",
-			401: "{ error: 'unauthorized' }",
-			403: "{ error: 'admin role required' }",
-			404: "{ error: 'user not found' }",
-			409: "{ error: 'cannot delete the last remaining admin', code: 'LAST_ADMIN' }",
-			429: "{ error: 'rate limited; retry in <seconds> seconds' }",
-			500: "{ error: 'server error' }",
+			400: "{ message: '<single validation message>' }",
+			401: "{ message: 'unauthorized' }",
+			403: "{ message: 'admin role required' }",
+			404: "{ message: 'user not found' }",
+			409: "{ message: 'cannot delete the last remaining admin' }",
+			429: "{ message: 'rate limited; retry in <seconds> seconds' }",
+			500: "{ message: 'server error' }",
 		},
 		group: "Users",
-		tables: ["users", "sessions", "refresh_tokens", "alert_acks"],
+		tables: [
+		   "users",
+		   "sessions",
+		   "refresh_tokens",
+		   "alert_history",
+		   "alert_notifications"
+		],
 		tables_actions: {
 			users: "Delete",
 			sessions: "Cascade Delete",
 			refresh_tokens: "Cascade Delete",
-			alert_acks: "Cascade Delete"
+			alert_history: "Set owner reference NULL; retain history and actor emails",
+			alert_notifications: "Cascade Delete (recipient rows)"
 		},
 		constraints: {
 			criteria:
@@ -254,12 +261,12 @@ export const USERS_ENDPOINTS =
 				"If the target is currently the only user with role: admin, request is rejected with 409 — prevents the deployment from ending up with zero admins",
 				"sessions.user_id and refresh_tokens.user_id are declared ON DELETE CASCADE — deleting a user removes all of their sessions and refresh_tokens rows in the same transaction as the users delete, so the 204 path never hits a dangling FK constraint",
 				"Deleting another user does not clear the caller's refresh_token or session_hint. It cannot clear cookies in the deleted user's browsers either: their hints can remain stale, but their next POST /api/auth/refresh returns 401 and clears both cookies. The hint only tells the frontend to try refresh; it never proves the account or session still exists. After self-deletion, the frontend discards its access token and clears session_hint at Path=/; the remaining HttpOnly refresh cookie is unusable because its database row was deleted",
-				"alert_acks.user_id is also ON DELETE CASCADE — a deleted user's alert acknowledgment history is removed with them; this is an explicit, accepted product decision (not silent data loss) since re-showing acks for a deleted account has no meaningful owner to display",
+				"The alert_history owner reference uses ON DELETE SET NULL — deleting a user clears ownership without deleting alert history. Retain acked_by and resolved_by actor email snapshots unchanged, including for deleted accounts. alert_notifications.user_id uses ON DELETE CASCADE, removing only the deleted recipient notifications.",
 				"400 returned if the {id} path segment isn't a syntactically valid UUID — malformed path params are rejected the same way as malformed query params or body fields elsewhere in this spec, not left to fall through to an unhandled 500 or a misleading 404",
 			],
 			security: [
 				{
-					text: "Deleting a user cascades sessions/refresh_tokens immediately (their next /api/auth/refresh will fail), but does not and cannot revoke any access token already issued to them — validates signature/expiry only, no DB hit per request. A just-deleted user (including a self-deleted admin) can keep making authenticated calls on that still-valid token until it naturally expires, up to the full 15-minute TTL. This is the same claims-lag tradeoff already accepted for demotion, extended here to deletion rather than a separate gap",
+					text: "Deleting a user cascades sessions/refresh_tokens immediately. AuthFilter resolves the current users row on every authenticated HTTP request after validating JWT signature and expiry; a deleted user receives 401 immediately on their next request, even with an unexpired access token. Current database role changes also apply on the next request.",
 					refs: ["gw-strat-jwt"],
 				},
 			],

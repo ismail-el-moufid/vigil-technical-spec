@@ -127,13 +127,16 @@ export const PAGES =
 	{
 		name: "Alerts",
 		path: "/alerts",
-		desc: "Alert history feed with infinite scroll, filters, and rules tab. Alert Telemetry Evaluation pipeline terminates here.",
+		desc: "Shared alert history feed with ownership-aware acknowledge/resolve/reopen actions, separate personal notification seen state, infinite scroll, filters, and rules tab. Shared alert broadcasts update history; recipient-only Notification broadcasts update personal notifications. Alert Telemetry Evaluation pipeline terminates here.",
 		role: "Frontend Lead + Backend Lead",
 		group: "Alerts",
 		endpointIds:
 		[
 			"ep-alerts-ws",
 			"ep-alerts-list",
+			"ep-alert-history-update",
+			"ep-alert-notifications-list",
+			"ep-alert-notification-update",
 			"ep-alert-rules-list",
 			"ep-alert-rules-create",
 			"ep-alert-rules-update",

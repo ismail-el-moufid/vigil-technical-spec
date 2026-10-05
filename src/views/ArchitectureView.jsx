@@ -119,9 +119,9 @@ export default function ArchitectureView({ highlightSectionId })
 					<section
 						key={section.id}
 						id={instanceId + "-" + section.id}
-						ref={(node) => 
+						ref={(node) =>
 						{
-							sectionRefs.current[section.id] = node; 
+							sectionRefs.current[section.id] = node;
 						}}
 						className={"architecture-section" + (highlightSectionId === section.id ? " architecture-section-highlighted" : "")}
 						aria-labelledby={instanceId + "-" + section.id + "-title"}

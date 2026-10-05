@@ -9,10 +9,10 @@ export const CONFIG_ENDPOINTS =
 		response:
 		{
 			200: "{ api_key: '<uuid>', ingestion_key: '<uuid>' }",
-			401: "{ error: 'unauthorized' }",
-			403: "{ error: 'admin role required' }",
-			429: "{ error: 'rate limited; retry in <seconds> seconds' }",
-			500: "{ error: 'server error' }",
+			401: "{ message: 'unauthorized' }",
+			403: "{ message: 'admin role required' }",
+			429: "{ message: 'rate limited; retry in <seconds> seconds' }",
+			500: "{ message: 'server error' }",
 		},
 		group: "Config Keys",
 		tables: [],

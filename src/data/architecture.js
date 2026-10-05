@@ -1,4 +1,4 @@
-export const ARCHITECTURE_DELIVERY_DIAGRAM = "flowchart TD\n\tA[Custom Collector exporter] --> B[Write telemetry to ClickHouse]\n\tB --> C[Confirm data is queryable]\n\tC --> D[POST /internal/alerts/trigger-evaluation]\n\tD --> E[Backend queries ClickHouse and evaluates rules]\n\tE --> F[Persist resulting alerts in PostgreSQL]\n\tF --> G[Return 204 No Content]\n\tlinkStyle default stroke:white;";
+export const ARCHITECTURE_DELIVERY_DIAGRAM = "flowchart TD\n\tA[Custom Collector exporter] --> B[Write telemetry to ClickHouse]\n\tB --> C[Confirm data is queryable]\n\tC --> D[POST /internal/alerts/trigger-evaluation]\n\tD --> E[Backend queries ClickHouse and evaluates rules]\n\tE --> F[Persist alerts and recipient notifications in PostgreSQL]\n\tF --> G[Return 204 No Content]\n\tlinkStyle default stroke:white;";
 
 export const ARCHITECTURE_SECTIONS =
 [
@@ -9,7 +9,7 @@ export const ARCHITECTURE_SECTIONS =
 		"items": [
 			{
 				"title": "Telemetry and evaluation",
-				"text": "The custom Go Collector exporter writes telemetry to ClickHouse synchronously, confirms queryability, then POSTs metadata to /internal/alerts/trigger-evaluation. Spring Boot evaluates event-time windows, persists resulting alerts in PostgreSQL, and returns 204. Notifications are not stored."
+				"text": "The custom Go Collector exporter writes telemetry to ClickHouse synchronously, confirms queryability, then POSTs metadata to /internal/alerts/trigger-evaluation. Spring Boot evaluates event-time windows, persists resulting alerts in PostgreSQL, and returns 204. Callback metadata is not stored; recipient notifications are persisted separately with personal seen state."
 			},
 			{
 				"title": "Callback contract",
@@ -56,7 +56,7 @@ export const ARCHITECTURE_SECTIONS =
 			},
 			{
 				"title": "Synchronous storage and evaluation",
-				"text": "ClickHouse uses synchronous inserts on one instance with a persistent volume. Spring Boot queries that same instance. There are no replicas, distributed tables, or asynchronous inserts. The callback follows a successful insert response. The backend evaluates all matching services/rules and commits resulting alert_history rows in one PostgreSQL transaction before returning 204; it does not wait for LLM completion or webhooks."
+				"text": "ClickHouse uses synchronous inserts on one instance with a persistent volume. Spring Boot queries that same instance. There are no replicas, distributed tables, or asynchronous inserts. The callback follows a successful insert response. The backend evaluates all matching services/rules and commits resulting alert_history and recipient alert_notifications rows in one PostgreSQL transaction before returning 204; it does not wait for LLM completion or webhooks."
 			},
 			{
 				"title": "Callback retry policy",
@@ -68,7 +68,7 @@ export const ARCHITECTURE_SECTIONS =
 			},
 			{
 				"title": "Crash behavior",
-				"text": "Callback retry state exists only in memory. A Collector crash after storage but before callback completion can lose that evaluation request. Telemetry remains in ClickHouse. Later callbacks may evaluate overlapping history but do not guarantee recovery. A lost response can produce duplicate alerts on retry. No notification table, durable retry state, evaluation queue, replay, or exactly-once processing is provided."
+				"text": "Callback retry state exists only in memory. A Collector crash after storage but before callback completion can lose that evaluation request. Telemetry remains in ClickHouse. Later callbacks may evaluate overlapping history but do not guarantee recovery. A lost response can produce duplicate alerts on retry. No callback-metadata table, durable callback retry state, evaluation queue, replay, or exactly-once processing is provided. Recipient alert_notifications are stored independently for personal seen state."
 			},
 			{
 				"title": "Asynchronous external delivery",
@@ -88,6 +88,10 @@ export const ARCHITECTURE_SECTIONS =
 			{
 				"title": "Retention",
 				"text": "Logs, metrics and traces have a 30-day TTL. TTL deletion runs asynchronously during ClickHouse maintenance and is not an immediate privacy-erasure guarantee. PostgreSQL alert history has no automatic expiry and remains retained until an explicit cleanup policy is introduced."
+			},
+			{
+				"title": "Shared history and personal notifications",
+				"text": "History status is shared: sent, acknowledged or resolved. The acknowledging owner controls owned records; unowned history can be resolved directly. Actor email snapshots survive owner deletion, while owner_id becomes null. Optimistic version locking rejects concurrent conflicts with 409. Personal notifications are keyed by (user_id, alert_history_id), store seen/seen_at, and cascade on recipient or history deletion. Shared alert updates reach all connected users; Notification broadcasts reach only recipient sessions. REST and WebSocket actions use the same services."
 			},
 			{
 				"title": "PostgreSQL integrity",
@@ -110,7 +114,7 @@ export const ARCHITECTURE_SECTIONS =
 		"items": [
 			{
 				"title": "Custom Collector exporter",
-				"text": "A custom Go exporter is compiled with OpenTelemetry Collector Builder (OCB), alongside the required receivers, processors and extensions, and packaged in a custom Docker image. That exporter owns the synchronous ClickHouse insert and subsequent metadata callback; the two operations are not independent export destinations."
+				"text": "A custom Go exporter is compiled with OpenTelemetry Collector Builder (OCB), alongside the required receivers, processors and extensions, and packaged in a custom Docker image. That exporter owns the synchronous ClickHouse insert and subsequent metadata callback; the two operations are not independent export destinations. For metrics, preserve the original OTLP type, unit, temporality, monotonic flag, start time and series identity, plus histogram sum/count; do not flatten histograms into scalar values or infer types from names. ClickHouse computes generic time-bucket aggregates for GET /api/telemetry/metrics; the Collector does not precompute fixed chart buckets. Unsupported OTLP summary distributions remain unavailable to bucketed reads."
 			},
 			{
 				"title": "Single-host topology",

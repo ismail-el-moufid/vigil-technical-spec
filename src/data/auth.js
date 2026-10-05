@@ -15,9 +15,9 @@ const REFRESH_TOKEN_COOKIE =
 	// 30 days: long enough that a user isn't forced to re-login every session,
 	// short enough to bound the exposure window of a stolen cookie given the
 	// reuse-detection story below (a leaked-but-unused token is only viable
-	// for this long). Paired with the 15-minute access-token TTL declared on
-	// AUTH_STRATEGIES.JWT — that's the window "claims lag DB state" actually
-	// means in practice.
+	// for this long). The access-token TTL remains 15 minutes; JWT
+	// authentication loads the current database user and role on each request,
+	// so deletion and role changes do not wait for token expiry.
 	maxAge: "30d",
 };
 
@@ -39,7 +39,7 @@ export const AUTH_ENDPOINTS =
 [
 	{
 		route: "/api/setup",
-		service: "Spring Boot · in-memory startup state",
+		service: "Spring Boot + PostgreSQL",
 		owner: "Backend Lead",
 		method: "GET",
 		request:
@@ -51,17 +51,17 @@ export const AUTH_ENDPOINTS =
 		response:
 		{
 			200: "true | false — setupRequired (raw JSON boolean)",
-			429: "{ timestamp: '<iso8601>', status: 429, path: '/api/setup', error: { message: 'rate limited; retry in <seconds> seconds' } }",
-			500: "{ timestamp: '<iso8601>', status: 500, path: '/api/setup', error: { message: 'server error' } }",
+			429: "{ message: 'rate limited; retry in <seconds> seconds' }",
+			500: "{ message: 'server error' }",
 		},
 		group: "Setup",
-		tables: [],
-		tables_actions: {},
+		tables: ["users"],
+		tables_actions: { users: "Read (countByRole(ADMIN))" },
 		constraints: {
 			criteria: [
-				"At process startup, the backend performs one users existence query and caches setup_required in memory: true when users has no rows, otherwise false",
-				"GET /api/setup returns that cached setup_required value and does not hit PostgreSQL on the request path",
-				"After POST /api/setup successfully commits the first admin, the backend flips the cached value to false; on restart the one startup query rebuilds the value from users"
+				"Every GET /api/setup request queries users with countByRole(ADMIN) and returns setupRequired = (countByRole(ADMIN) == 0)",
+				"Existing non-admin users do not prevent setup; any current ADMIN user, including the persisted API-key user, makes setupRequired false",
+				"No startup cache or persisted setup-completion flag is used; the next request reflects the current admin count"
 			],
 			security: [],
 			rateLimit: "10 req/min",
@@ -94,10 +94,10 @@ export const AUTH_ENDPOINTS =
 				body: "{ role: 'admin', access_token }",
 				cookies: [REFRESH_TOKEN_COOKIE, SESSION_HINT_COOKIE]
 			},
-			400: "{ timestamp: '<iso8601>', status: 400, path: '/api/setup', error: { email: '<validation message>', password: '<validation message>' } }",
-			409: "{ timestamp: '<iso8601>', status: 409, path: '/api/setup', error: { message: 'setup already completed' } }",
-			429: "{ timestamp: '<iso8601>', status: 429, path: '/api/setup', error: { message: 'rate limited; retry in <seconds> seconds' } }",
-			500: "{ timestamp: '<iso8601>', status: 500, path: '/api/setup', error: { message: 'server error' } }",
+			400: "{ message: '<validation message>' }",
+			409: "{ message: 'setup already completed' }",
+			429: "{ message: 'rate limited; retry in <seconds> seconds' }",
+			500: "{ message: 'server error' }",
 		},
 		group: "Setup",
 		tables: ["users", "sessions", "refresh_tokens"],
@@ -114,11 +114,10 @@ export const AUTH_ENDPOINTS =
 				"Frontend + backend validation",
 				"mustbe@api.email is reserved for the API-key user; submitting it as the human admin email returns 400 with a validation message",
 				"400 returned if email is missing, not a string, or not a well-formed email address, or if password is missing, not a string, or does not meet the password-strength pattern",
-				"Validation failures return a string message rather than a contextual error envelope or field-error map",
-				"Server checks the in-memory setup_required flag before creation — false returns 409 without a users-table existence read. First-admin creation is serialized in-process so only one concurrent setup request can proceed while the flag is true",
-				"On the non-409 path, two users rows are inserted atomically: the human admin with the submitted email/password and a separate API-key user with email mustbe@api.email, a cryptographically random password stored only as a salted bcrypt hash, and role admin (ADMIN authority). One session row and one refresh_tokens row are created for the human admin only; the returned access token and cookies belong to that human admin. The generated API-key user password is not returned or logged. Only after that transaction commits is setup_required flipped to false in memory",
-				"A restart reconstructs setup_required with the single boot-time users existence query, so the cached value is not treated as durable state",
-				"After a 201 response, the frontend stores the human admin access token in memory and navigates to /onboarding, using that token to fetch configuration keys and authenticate live telemetry reads. setup_required is already false after account creation; telemetry detection does not gate setup completion and never changes that flag. Authenticated admins can revisit /onboarding without a persisted onboarding-completion flag; reloading restores the session through the normal auth guard rather than repeating first-admin creation",
+				"All custom HTTP exception responses use { message: '<message>' }, including validation, authentication, authorization, conflict, rate-limit, and server errors; never raw strings, error fields, field-error maps, or contextual envelopes",
+				"First-admin creation is serialized in-process and independently checks countByRole(ADMIN) inside the creation transaction; a nonzero count returns 409. The check and inserts are atomic so only one concurrent setup request can create the initial admins",
+				"On the non-409 path, two users rows are inserted atomically: the human admin with the submitted email/password and a separate API-key user with email mustbe@api.email, a cryptographically random password stored only as a salted bcrypt hash, and role admin (ADMIN authority). One session row and one refresh_tokens row are created for the human admin only; the returned access token and cookies belong to that human admin. The generated API-key user password is not returned or logged. After that transaction commits, countByRole(ADMIN) is nonzero and the next GET /api/setup returns false",
+				"After a 201 response, the frontend stores the human admin access token in memory and navigates to /onboarding, using that token to fetch configuration keys and authenticate live telemetry reads. setupRequired is false after account creation because admins exist; telemetry detection does not gate setup completion or change the admin count. Authenticated admins can revisit /onboarding without a persisted onboarding-completion flag; reloading restores the session through the normal auth guard rather than repeating first-admin creation",
 			],
 			security: [],
 			rateLimit: "10 req/min",
@@ -151,10 +150,10 @@ export const AUTH_ENDPOINTS =
 				body: "{ role: admin | viewer, access_token }",
 				cookies: [REFRESH_TOKEN_COOKIE, SESSION_HINT_COOKIE]
 			},
-			400: "{ timestamp: '<iso8601>', status: 400, path: '/api/auth/login', error: { email: '<validation message>', password: '<validation message>' } }",
-			401: "{ timestamp: '<iso8601>', status: 401, path: '/api/auth/login', error: { message: 'unauthorized' } }",
-			429: "{ timestamp: '<iso8601>', status: 429, path: '/api/auth/login', error: { message: 'rate limited; retry in <seconds> seconds' } }",
-			500: "{ timestamp: '<iso8601>', status: 500, path: '/api/auth/login', error: { message: 'server error' } }",
+			400: "{ message: '<validation message>' }",
+			401: "{ message: 'unauthorized' }",
+			429: "{ message: 'rate limited; retry in <seconds> seconds' }",
+			500: "{ message: 'server error' }",
 		},
 		group: "Auth",
 		tables: ["users", "sessions", "refresh_tokens"],
@@ -197,11 +196,11 @@ export const AUTH_ENDPOINTS =
 			   cookies: [REFRESH_TOKEN_COOKIE, SESSION_HINT_COOKIE]
 			},
 			401: {
-			   body: "{ error: 'unauthorized' }",
+			   body: "{ message: 'unauthorized' }",
 			   clears: ["refresh_token", "session_hint"]
 			},
-			429: "{ error: 'rate limited; retry in <seconds> seconds' }",
-			500: "{ error: 'server error' }",
+			429: "{ message: 'rate limited; retry in <seconds> seconds' }",
+			500: "{ message: 'server error' }",
 		},
 		group: "Auth",
 		tables: ["sessions", "refresh_tokens"],
@@ -245,11 +244,11 @@ export const AUTH_ENDPOINTS =
 		{
 			204: { body: null, clears: ["refresh_token", "session_hint"] },
 			401: {
-			   body: "{ error: 'unauthorized' }",
+			   body: "{ message: 'unauthorized' }",
 			   clears: ["refresh_token", "session_hint"]
 			},
-			429: "{ error: 'rate limited; retry in <seconds> seconds' }",
-			500: "{ error: 'server error' }",
+			429: "{ message: 'rate limited; retry in <seconds> seconds' }",
+			500: "{ message: 'server error' }",
 		},
 		group: "Auth",
 		tables: ["sessions", "refresh_tokens"],
@@ -290,8 +289,8 @@ export const AUTH_ENDPOINTS =
 			200: {
 				body: "{ sessions: [{ id, user_agent, ip_address, last_used_at, current }] }"
 			},
-			401: "{ error: 'unauthorized' }",
-			500: "{ error: 'server error' }",
+			401: "{ message: 'unauthorized' }",
+			500: "{ message: 'server error' }",
 		},
 		group: "Auth",
 		tables: ["sessions"],
@@ -337,11 +336,11 @@ export const AUTH_ENDPOINTS =
 					}
 				]
 			},
-			400: "{ error: '<validation message>' }",
-			401: "{ error: 'unauthorized' }",
-			403: "{ error: 'forbidden' }",
-			404: "{ error: 'not found' }",
-			500: "{ error: 'server error' }",
+			400: "{ message: '<validation message>' }",
+			401: "{ message: 'unauthorized' }",
+			403: "{ message: 'forbidden' }",
+			404: "{ message: 'not found' }",
+			500: "{ message: 'server error' }",
 		},
 		group: "Auth",
 		tables: ["sessions", "refresh_tokens"],

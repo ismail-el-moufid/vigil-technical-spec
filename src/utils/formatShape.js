@@ -3,7 +3,7 @@
 // line breaks, WITHOUT rewriting the shorthand into strict JSON syntax.
 // Structured objects and arrays are serialized before reaching React children.
 // Respects nested {}/[]/'' so values like "status: acknowledged | resolved"
-// or "my_ack: { status, acked_at } | null" stay intact.
+// or "status: sent | acknowledged | resolved" stay intact.
 export default function formatShape(str)
 {
 	if (typeof str !== "string") return JSON.stringify(str, null, "\t") ?? String(str);

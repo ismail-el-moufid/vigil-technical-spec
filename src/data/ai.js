@@ -19,11 +19,11 @@ export const AI_ENDPOINTS =
 		{
 			chunk: "data: { token: '...' }",
 			done:  "data: { done: true }",
-			400: "{ error: '<validation message>' }",
-			401: "{ error: 'unauthorized' }",
-			429: "{ error: 'rate limited; retry in <seconds> seconds' }",
-			500: "{ error: 'server error' }",
-			503: "{ error: 'Analysis unavailable' }",
+			400: "{ message: '<single validation message>' }",
+			401: "{ message: 'unauthorized' }",
+			429: "{ message: 'rate limited; retry in <seconds> seconds' }",
+			500: "{ message: 'server error' }",
+			503: "{ message: 'Analysis unavailable' }",
 		},
 		group: "AI",
 		tables: [],
@@ -43,7 +43,7 @@ export const AI_ENDPOINTS =
 			realtime:
 				"Tokens delivered as HTTP chunked transfer encoding. Connection closes on completion.",
 			fallback:
-				"Returns HTTP 503 with { error: 'Analysis unavailable' } on LLM timeout (30s)",
+				"Returns HTTP 503 with { message: 'Analysis unavailable' } on LLM timeout (30s)",
 			dedup: "None",
 		},
 		authStrategy: ["JWT", "API_KEY"],

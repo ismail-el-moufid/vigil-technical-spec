@@ -22,12 +22,12 @@ export const AUTH_STRATEGIES =
 			"15-minute TTL — short-lived; frontend holds it in memory only — never written to a cookie or localStorage, so it can't be read by an XSS payload",
 			"Reuse an unexpired access token without checking session_hint. Whenever the access token is missing (including after a hard reload) or expired, check the hint: session_hint=1 means call POST /api/auth/refresh; no hint means skip refresh and use GET /api/setup to choose /login or /setup. This saves an unnecessary refresh request when logged out, not a request or database work when restoring a valid session. Accepted tradeoff: if the hint is independently deleted while the refresh cookie remains valid, the frontend skips session recovery and shows /login when setup is complete",
 			"session_hint is a JavaScript-readable cookie (value 1, Secure, SameSite=Strict, Path=/, Max-Age=30d), set and renewed alongside the HttpOnly refresh_token. It can be stale or edited and is never proof of login. A refresh 401 clears both cookies and sends the frontend through GET /api/setup; network failures, 429, and 5xx remain error/retry states without clearing cookies",
-			"AuthFilter validates signature and expiry only, then sets the SecurityContext principal — no DB hit on every request",
+			"AuthFilter validates JWT signature and expiry, then loads the current users row by token subject on every authenticated HTTP request. Missing/deleted user returns 401; SecurityContext identity and authorities come from the current database user/role, not stale JWT claims",
 			"Onboarding live reads use the in-memory access token as the URL-encoded token query parameter on all three EventSource connections, never the ingestion_key or returned api_key. At access-token expiry, close those streams and coordinate a single in-flight session refresh shared across subscribers, using the same session_hint rules; reopen only the active monitoring session with the new token. Refresh 401 follows normal setup/login routing; network failures, 429 and 5xx remain retry states. Native EventSource errors expose no HTTP status/body, so do not infer 401 or independently refresh for each stream error; use the known token expiry and explicit refresh results, with backoff for other connection failures",
 			"If an API call returns 401 because the access token expired, the frontend applies the same hint check before attempting refresh. With session_hint=1, POST /api/auth/refresh validates the refresh_token cookie against the refresh_tokens table, rotates the row, reissues a new access token and refresh cookie, and renews session_hint with the refresh cookie's expiry. Without the hint, skip refresh and use GET /api/setup to choose /login or /setup",
-			"Claims in a live access token are explicitly designed to lag DB state until the next refresh — the tradeoff for no DB hit on every request. Scope of the re-check: 'admin endpoints' means every endpoint whose requiredRole is ADMIN, GET included, not writes only — a demoted admin's still-live token gets a 403 on their very next call to any ADMIN-tier route (e.g. GET /api/config/keys, GET /api/users), it just isn't caught until that next request happens, per the claims-lag tradeoff above. ADMIN_/_VIEWER-tier reads are not re-checked beyond signature/expiry, since any authenticated role already satisfies them",
+			"Role changes take effect on the next authenticated request across all routes. ADMIN-tier authorization uses the current database role and returns 403 after demotion; ADMIN_/_VIEWER routes also require an existing database user",
 			{
-				text: "The same claims-lag tradeoff applies to account deletion, not just demotion: deleting a user cascades their sessions/refresh_tokens rows immediately (their next /api/auth/refresh fails), but does not and cannot revoke an access token already issued to them, since AuthFilter never hits the DB per request. A just-deleted user (including a self-deleted admin) can keep making authenticated calls on that still-valid token, indistinguishable from any other valid JWT, until it naturally expires — up to the full 15-minute TTL. Accepted as the same tradeoff already made for demotion above, not a separate gap",
+				text: "Account deletion cascades sessions/refresh_tokens and causes immediate 401 on the next authenticated HTTP request: an unexpired JWT is insufficient when its subject no longer exists in users",
 				refs: ["ep-users-delete"],
 			},
 			"Signing key: HMAC secret sourced from a Spring Boot @ConfigurationProperties bean (vigil.jwt-secret) — auto-generated as a random secret at startup via @PostConstruct and held in memory only if the property is left unset. This in-memory default is a dev-mode convenience, not the production design: a restart or a multi-instance deployment where vigil.jwt-secret isn't set identically everywhere invalidates every outstanding access token silently (the instance that issued it and the instance validating it disagree on the secret). Accepted for this project's scope; production deployment requires vigil.jwt-secret to be set explicitly and identically across instances",
@@ -42,7 +42,7 @@ export const AUTH_STRATEGIES =
 		[
 			"Program-level lifetime",
 			"vigil.api-key: sourced from the same @ConfigurationProperties bean, auto-generated as a UUID via @PostConstruct at startup and held in memory only if left unset — this auto-generated, in-memory-only behavior is the intended design as-is, not a dev-mode default awaiting a production override. Accepted tradeoff of that design: a restart silently rotates it, breaking any external API client holding the old value with no warning, and a multi-instance deployment mints a different key per instance since nothing pins it identically everywhere",
-			"Bound to a persisted users row with email mustbe@api.email and role admin (ADMIN authority), created with a cryptographically random password in the same transaction as the first human admin during POST /api/setup. Store only the salted bcrypt password hash; never return or log the generated password. Valid API-key authentication resolves this user as the SecurityContext principal, including its user ID for per-user operations such as alert acknowledgments. Role checks use this user's role rather than a roleless ADMIN bypass. Before setup creates the user, API-key authentication cannot succeed. The user is not recreated on restart; startup key generation/rotation remains unchanged",
+			"Bound to a persisted users row with email mustbe@api.email and role admin (ADMIN authority), created with a cryptographically random password in the same transaction as the first human admin during POST /api/setup. Store only the salted bcrypt password hash; never return or log the generated password. Valid API-key authentication resolves this user as the SecurityContext principal, including its user ID for shared history ownership and per-user notification operations. Role checks use this user's role rather than a roleless ADMIN bypass. Before setup creates the user, API-key authentication cannot succeed. The user is not recreated on restart; startup key generation/rotation remains unchanged",
 		],
 	},
 	INTERNAL_ONLY: {
@@ -64,7 +64,7 @@ export const AUTH_STRATEGIES =
 		items:
 		[
 			{
-				text: "Resolves role/identity identically, off the same signed claims — this is a JWT validated at a different point in the request lifecycle (HTTP Upgrade instead of every request's AuthFilter), not a distinct credential type or a fixed/implicit role",
+				text: "Validates JWT signature/expiry and resolves the current database user/role at the HTTP Upgrade, just like AuthFilter; missing/deleted users receive 401 and authorization uses current database authorities, not signed role claims",
 				refs: ["gw-strat-jwt"],
 			},
 			"Token passed as ?token= on the upgrade request — same tradeoff as SSE (native WebSocket clients can't set an Authorization header either); accepted for this project",
@@ -102,12 +102,9 @@ export const AUTH_STRATEGIES =
 // enforces itself since it happens outside this process's ports. It still
 // needs to exist before that file can be written, which is why key
 // generation for both is grouped into one step below rather than split.
-// Setup state is also initialized before the ports open: the backend performs
-// one users existence query, stores setup_required in memory alongside its
-// other boot-time state, and serves GET /api/setup from that cached boolean.
-// A successful first-admin transaction flips it to false; a restart rebuilds
-// it from the same one query. This keeps PostgreSQL off the GET /api/setup
-// request path.
+// Setup state is not cached at startup: GET /api/setup queries PostgreSQL
+// on every request and computes setup_required as countByRole(ADMIN) == 0.
+// POST /api/setup re-checks the same database condition inside its transaction.
 //
 // vigil.jwt-secret (the same HMAC secret the JWT strategy signs access
 // tokens with) is generated by the same @PostConstruct mechanism but isn't
@@ -121,12 +118,6 @@ export const STARTUP_SEQUENCE =
 		tagType: "rate",
 		label: "Generate vigil.api-key + vigil.ingestion-key",
 		sub: "Whichever key is unset on the config bean gets generated via UUID.randomUUID(). vigil.api-key stays in memory only; vigil.ingestion-key is also written to a shared file for the collector to read. Live values are fetched via a GET request.",
-	},
-	{
-		tag: "STATE",
-		tagType: "sec",
-		label: "Cache setup_required",
-		sub: "One PostgreSQL existence query against users runs at boot. The result is stored in memory; GET /api/setup reads this cached boolean with no per-request DB hit. A successful first-admin commit flips it to false.",
 	},
 	{
 		tag: "CHAIN",
@@ -190,8 +181,9 @@ export const RATE_LIMITING_INFO =
 		[
 			"Capacity: 10 tokens. Refill: +10 every 60 s.",
 			"Keyed by client IP — shared bucket across all endpoints for that IP, not one bucket per route",
-			"429 Too Many Requests on exhaustion, with a plain string response combining the reason and retry delay: 'rate limited; retry in <seconds> seconds'. Replace <seconds> with the positive whole-second wait until the bucket permits another request, rounding up. Do not send a Retry-After header or a separate retry field. Over-limit WebSocket ack frames use the same combined text in message and keep the connection open",
+			"429 Too Many Requests on exhaustion, with JSON { message: 'rate limited; retry in <seconds> seconds' }. Replace <seconds> with the positive whole-second wait until the bucket permits another request, rounding up. Do not send a Retry-After header or a separate retry field. Over-limit WebSocket ack/notif frames use the same combined text in message and keep the connection open",
 			"Rate check runs before auth — an exhausted IP never reaches AuthFilter",
+			"All custom HTTP exceptions, including validation, authentication and authorization failures, use exactly { message: '<message>' }. Validation returns one message, not a field map; never return raw strings, error/code fields or context envelopes. This also applies to rejected SSE/WS opening HTTP requests before the stream is established",
 			"Bucket counts requests, not rows: GET ?format=csv on the telemetry endpoints (metrics/traces/logs) ignores pagination and returns the full matching dataset as one unpaginated text/csv response, but still consumes exactly one token, same as a normal small page — this is what makes CSV export viable without a separate rate-limit carve-out",
 			"Known simplification: a single page load can consume several tokens at once (e.g. Overview: 3 REST GETs + 3 SSE upgrades = 6 of 10), and the bucket is shared per-IP, so multiple users behind the same NAT/proxy draw from the same 10. Acceptable for project scope; a production system would key per-user and/or size buckets per-route.",
 		],
@@ -255,8 +247,14 @@ export const ROLE_ENFORCEMENT_INFO =
 				"All telemetry reads · GET + PATCH /api/users/me",
 				"POST /api/llm/analyze · all SSE streams",
 				{
-					text: "GET /api/alerts · GET /api/alerts/rules · PUT /api/alerts/ack/{id}",
-					refs: ["ep-alerts-list", "ep-alert-rules-list", "ep-alert-ack"],
+					text: "GET /api/alerts · GET /api/alerts/rules · PATCH /api/alerts/history/{id} (owner-only when owned) · GET /api/alerts/notifications · PUT /api/alerts/notifications/{historyId} (caller only)",
+					refs: [
+					   "ep-alerts-list",
+					   "ep-alert-rules-list",
+					   "ep-alert-history-update",
+					   "ep-alert-notifications-list",
+					   "ep-alert-notification-update"
+					],
 				},
 				{
 					text: "WS alerts stream — a WebSocket, not an SSE stream; grouped here rather than under \"all SSE streams\" above since it isn't one",

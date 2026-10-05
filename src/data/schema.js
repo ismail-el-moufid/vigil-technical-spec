@@ -224,13 +224,54 @@ export const SCHEMA =
 				type: "UUID",
 				fk: { table: "alert_rules", column: "id", onDelete: "SET NULL" },
 				nullable: true,
-				notes: "SET NULL, not CASCADE — alert_history is a historical record; deleting the rule that produced a past alert should not delete the alert. Non-default alert_rules rows are deletable (default rows can only be disabled, never deleted), so this is the one FK in this schema where the parent side actually needs a story. null is genuinely ambiguous on its own — it means EITHER 'rule since deleted' (this SET NULL firing) OR 'no rule ever matched' (a silence-watchdog alert — fired when a service goes quiet for too long, never backed by an alert_rules row to begin with). The two cases are distinguished by metric_name, not by rule_id: metric_name === 'service_silent' is the silence-watchdog case; any other metric_name with rule_id === null is the deleted-rule case. Consumers must branch on metric_name, not treat null rule_id as self-describing. This is a deliberate tradeoff, not an oversight: a dedicated discriminator column (e.g. source: 'rule' | 'silence_watchdog') would remove the ambiguity at the schema level, but was judged not worth a fourth column when metric_name already forces every consumer to branch on it anyway for unrelated reasons (rendering the alert's title/description) — reusing that existing branch point over adding a column whose only job would be disambiguation"
+				notes: "SET NULL, not CASCADE — alert_history is a historical record; deleting the rule that produced a past alert should not delete the alert. Non-default alert_rules rows are deletable (default rows can only be disabled, never deleted), so history retains its evaluation-time snapshot independently of the current rule. null is genuinely ambiguous on its own — it means EITHER 'rule since deleted' (this SET NULL firing) OR 'no rule ever matched' (a silence-watchdog alert — fired when a service goes quiet for too long, never backed by an alert_rules row to begin with). The two cases are distinguished by metric_name, not by rule_id: metric_name === 'service_silent' is the silence-watchdog case; any other metric_name with rule_id === null is the deleted-rule case. Consumers must branch on metric_name, not treat null rule_id as self-describing. This is a deliberate tradeoff, not an oversight: a dedicated discriminator column (e.g. source: 'rule' | 'silence_watchdog') would remove the ambiguity at the schema level, but was judged not worth a fourth column when metric_name already forces every consumer to branch on it anyway for unrelated reasons (rendering the alert's title/description) — reusing that existing branch point over adding a column whose only job would be disambiguation"
 			},
 			{
 				name: "service",
 				type: "TEXT"
 			},
 			{ name: "triggered_at", type: "TIMESTAMPTZ" },
+			{
+			   name: "status",
+			   type: "TEXT",
+			   notes: "sent | acknowledged | resolved; DEFAULT sent; shared by all users"
+			},
+			{
+			   name: "owner_id",
+			   type: "UUID",
+			   nullable: true,
+			   fk: { table: "users", column: "id", onDelete: "SET NULL" },
+			   notes: "Acknowledging owner; only this user may change owned history. Deleting owner preserves status, actor emails and timestamps"
+			},
+			{
+			   name: "acked_at",
+			   type: "TIMESTAMPTZ",
+			   nullable: true,
+			   notes: "Re-acknowledgment resets to now; reopening to sent clears"
+			},
+			{
+			   name: "acked_by",
+			   type: "TEXT",
+			   nullable: true,
+			   notes: "Actor email snapshot retained on deletion/email change; reopening to sent clears"
+			},
+			{
+			   name: "resolved_at",
+			   type: "TIMESTAMPTZ",
+			   nullable: true,
+			   notes: "Resolution timestamp, including direct resolution without owner; re-acknowledgment or reopening clears"
+			},
+			{
+			   name: "resolved_by",
+			   type: "TEXT",
+			   nullable: true,
+			   notes: "Actor email snapshot retained on deletion/email change; re-acknowledgment or reopening clears"
+			},
+			{
+			   name: "version",
+			   type: "BIGINT",
+			   notes: "DEFAULT 0; optimistic-lock version increments on successful updates; concurrent conflicts can return 409. No client version input required"
+			},
 			{
 				name: "metric_name",
 				type: "TEXT",
@@ -273,39 +314,36 @@ export const SCHEMA =
 		],
 	},
 
-	alert_acks:
+	alert_notifications:
 	{
 		db: "PostgreSQL",
+		notes: "PK (user_id, alert_history_id); personal seen state, independent of shared status and ownership. Created on trigger unseen; PUT may create a missing caller row. Recipient and history deletion both cascade.",
 		columns:
 		[
 			{
-				name: "alert_id",
-				type: "UUID",
-				pk: true,
-				fk: { table: "alert_history", column: "id" },
-				notes: {
-					text: "no onDelete needed: no endpoint in this spec deletes alert_history rows (alerts are only acknowledged/resolved, never removed), so this FK's parent is never actually deleted — unlike alert_rules, which is deletable and whose FK (alert_history.rule_id) does declare SET NULL",
-					refs: ["ep-alert-ack"],
-				}
+			   name: "user_id",
+			   type: "UUID",
+			   pk: true,
+			   fk: { table: "users", column: "id", onDelete: "CASCADE" }
 			},
 			{
-				name: "user_id",
-				type: "UUID",
-				pk: true,
-				fk: { table: "users", column: "id", onDelete: "CASCADE" },
-				notes: "keyed on the immutable users.id, not email — a user changing their email (PATCH /api/users/me or /api/users/{id}) must not orphan their own ack history"
+			   name: "alert_history_id",
+			   type: "UUID",
+			   pk: true,
+			   fk: { table: "alert_history", column: "id", onDelete: "CASCADE" }
 			},
 			{
-				name: "status",
-				type: "TEXT",
-				notes: "acknowledged | resolved"
+			   name: "seen",
+			   type: "BOOLEAN",
+			   notes: "DEFAULT false; first true sets seen_at, repeated true preserves it"
 			},
 			{
-				name: "acked_at",
-				type: "TIMESTAMPTZ"
+			   name: "seen_at",
+			   type: "TIMESTAMPTZ",
+			   nullable: true,
+			   notes: "null when unseen; marking unseen clears timestamp"
 			},
 		],
-		notes: "PK is (alert_id, user_id) — per-user ack state, not a shared status. API responses still surface the acking user's email by joining to users.email at read time, since that's what the frontend displays; the join is just not the storage key.",
 	},
 
 	webhooks:
@@ -368,7 +406,48 @@ export const SCHEMA =
 			},
 			{
 				name: "value",
-				type: "Float64"
+				type: "Nullable(Float64)",
+				notes: "Scalar gauge/sum value; null for histograms. Existing scalar alert evaluation must exclude histogram rows rather than treat missing values as zero"
+			},
+			{
+			   name: "metric_type",
+			   type: "LowCardinality(String)",
+			   notes: "OTLP gauge | sum | histogram | exponential_histogram | summary; unknown for legacy rows. Never inferred from name. Initial bucket API rejects summary and unknown"
+			},
+			{
+			   name: "unit",
+			   type: "String",
+			   notes: "Original OTLP metric unit; do not silently mix units"
+			},
+			{
+			   name: "aggregation_temporality",
+			   type: "LowCardinality(String)",
+			   notes: "delta | cumulative for sums/histograms; unspecified for gauges/summaries/legacy rows"
+			},
+			{
+			   name: "is_monotonic",
+			   type: "Nullable(Bool)",
+			   notes: "OTLP Sum.is_monotonic; null for other types or unknown metadata"
+			},
+			{
+			   name: "start_timestamp",
+			   type: "Nullable(DateTime64(3))",
+			   notes: "OTLP point start time, needed for delta intervals and reset detection; null when unavailable"
+			},
+			{
+			   name: "series_id",
+			   type: "String",
+			   notes: "Stable hash of service, all resource attributes, instrumentation scope, metric name/unit/type/temporality and original point attributes; excludes exporter-added vigil.notification_id. Keeps instances and label sets distinct for reset-aware calculations"
+			},
+			{
+			   name: "histogram_sum",
+			   type: "Nullable(Float64)",
+			   notes: "Original histogram/exponential-histogram sum when present; missing sums cannot produce averages"
+			},
+			{
+			   name: "histogram_count",
+			   type: "Nullable(UInt64)",
+			   notes: "Original histogram/exponential-histogram sample count; cumulative values require per-series differencing before weighted averages"
 			},
 			{
 				name: "attributes",

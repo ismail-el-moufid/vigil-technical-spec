@@ -23,48 +23,6 @@ export { PAGES }                from "./pages.js";
 export { SCHEMA }               from "./schema.js";
 export { ARCHITECTURE_SECTIONS, ARCHITECTURE_DELIVERY_DIAGRAM } from "./architecture.js";
 
-// HTTP errors carry a string message, not a structured error envelope.
-// Keep the source declarations' explanatory suffixes and 401 cookie metadata.
-function normalizeErrorBody(value)
-{
-	if (typeof value !== "string") return value;
-	const alternatives = value.match(/^(?:\s*\{\s*error:\s*'[^']*'(?:,\s*code:\s*'[^']*')?\s*\}(?:\s*\|\s*)?)+/);
-	if (alternatives)
-	{
-		const messages = Array.from(
-			alternatives[0].matchAll(/error:\s*'([^']*)'/g),
-			(match) => match[1]
-		);
-		return messages.join(" | ") + value.slice(alternatives[0].length);
-	}
-	if (!value.startsWith("{ timestamp:")) return value;
-	const message = value.match(/message:\s*'([^']*)'/);
-	if (message) return message[1] + value.slice(value.indexOf("} }", message.index) + 3);
-	const validation = value.match(/error:\s*\{[^}]*?:\s*'([^']*)'/);
-	return validation ? validation[1] + value.slice(value.indexOf("} }", validation.index) + 3) : value;
-}
-
-function normalizeEndpointErrors(endpoint)
-{
-	if (!endpoint.response || typeof endpoint.response !== "object") return endpoint;
-
-	return {
-		...endpoint,
-		response: Object.fromEntries(
-			Object.entries(endpoint.response).map(([status, value]) =>
-			{
-				if (!/^[45]\d\d$/.test(status)) return [status, value];
-				return [
-				   status,
-				   typeof value === "object" && value !== null
-						? { ...value, body: normalizeErrorBody(value.body) }
-						: normalizeErrorBody(value)
-				];
-			})
-		),
-	};
-}
-
 export const ENDPOINTS =
 [
 	...AUTH_ENDPOINTS,
@@ -75,4 +33,4 @@ export const ENDPOINTS =
 	...WEBHOOKS_ENDPOINTS,
 	...AI_ENDPOINTS,
 	...INTERNAL_ENDPOINTS,
-].map(normalizeEndpointErrors);
+];

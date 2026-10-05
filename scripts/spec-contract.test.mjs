@@ -51,11 +51,11 @@ for (const { id, status, alternatives } of [
 {
 	test(`${id} preserves every ${status} error alternative`, () =>
 	{
-		assert.equal(response(id, status), alternatives.map(([message]) => message).join(" | "));
+		assert.equal(response(id, status), alternatives.map(([message]) => `{ message: '${message}' }`).join(" | "));
 	});
 }
 
-test("path-only validation errors name the id field", () =>
+test("path-only validation errors return one message", () =>
 {
 	for (const [id] of [
 		["ep-auth-sessions-revoke", "/api/auth/sessions/{id}"],
@@ -63,20 +63,23 @@ test("path-only validation errors name the id field", () =>
 		["ep-alert-rules-delete", "/api/alerts/rules/{id}"],
 	])
 	{
-		assert.equal(response(id, 400), "<validation message>");
+		assert.match(response(id, 400), /^\{ message: '<(?:single )?validation message>' \}$/, id);
 	}
 });
 
-test("setup routes return a boolean status and string errors", () =>
+test("setup routes return a boolean status and message errors", () =>
 {
 	assert.equal(response("ep-setup-status", 200), "true | false — setupRequired (raw JSON boolean)");
-	assert.equal(response("ep-setup-status", 429), "rate limited; retry in <seconds> seconds");
+	assert.equal(response("ep-setup-status", 429), "{ message: 'rate limited; retry in <seconds> seconds' }");
 	assert.equal(spec.ENDPOINTS.find((entry) => entry.id === "ep-auth-setup").route, "/api/setup");
 });
 
-test("alert acknowledgment route and rule creation body match the backend", () =>
+test("alert history update replaces the old acknowledgment route and preserves rule creation", () =>
 {
-	assert.equal(spec.ENDPOINTS.find((entry) => entry.id === "ep-alert-ack").route, "/api/alerts/ack/{id}");
+	const update = endpoint("ep-alert-history-update");
+	assert.equal(update.route, "/api/alerts/history/{id}");
+	assert.equal(update.method, "PATCH");
+	assert.ok(!spec.ENDPOINTS.some((entry) => entry.id === "ep-alert-ack" || entry.route === "/api/alerts/ack/{id}"));
 	const create = spec.ENDPOINTS.find((entry) => entry.id === "ep-alert-rules-create");
 	assert.deepEqual(create.request.body.find((field) => field.name === "service"),
 		{ name: "service", type: "string", required: true });
@@ -86,7 +89,7 @@ test("rate-limit responses combine the reason and retry delay in one message", (
 {
 	for (const endpoint of spec.ENDPOINTS.filter((entry) => entry.response?.[429]))
 	{
-		assert.equal(endpoint.response[429], "rate limited; retry in <seconds> seconds");
+		assert.equal(endpoint.response[429], "{ message: 'rate limited; retry in <seconds> seconds' }");
 	}
 	assert.equal(response("ep-alerts-ws", "rateLimited"),
 		"{ type: 'error', message: 'rate limited; retry in <seconds> seconds' }");
@@ -212,92 +215,215 @@ const sourceEndpoints = Object.entries(spec)
 	.filter(([name]) => name.endsWith("_ENDPOINTS"))
 	.flatMap(([, endpoints]) => endpoints);
 
-test("contextual source errors publish string messages", () =>
+function endpoint(id)
+{
+	const value = spec.ENDPOINTS.find((entry) => entry.id === id);
+	assert.ok(value, `Missing endpoint: ${id}`);
+	return value;
+}
+
+function shape(value)
+{
+	return typeof value === "string" ? value : JSON.stringify(value);
+}
+
+test("barrel publishes every source endpoint and response unchanged", () =>
+{
+	assert.equal(spec.ENDPOINTS.length, sourceEndpoints.length);
+	for (const source of sourceEndpoints)
+	{
+		assert.strictEqual(endpoint(source.id), source, source.id);
+		for (const [status, value] of Object.entries(source.response ?? {}))
+		{
+			assert.strictEqual(response(source.id, status), value, `${source.id}: ${status}`);
+		}
+	}
+});
+
+test("all custom HTTP errors contain only a single message, preserving cookie metadata", () =>
 {
 	let checked = 0;
-	for (const endpoint of sourceEndpoints)
+	for (const source of sourceEndpoints)
 	{
-		for (const [status, value] of Object.entries(endpoint.response ?? {}))
+		for (const [status, value] of Object.entries(source.response ?? {}))
 		{
-			if (typeof value === "string" && value.startsWith("{ timestamp:"))
-			{
-				assert.equal(typeof response(endpoint.id, status), "string", `${endpoint.id}: ${status}`);
-				assert.ok(!response(endpoint.id, status).startsWith("{"), `${endpoint.id}: ${status}`);
-				checked++;
-			}
+			if (!/^[45]\d\d$/.test(status)) continue;
+			const body = typeof value === "object" && value !== null ? value.body : value;
+			assert.equal(typeof body, "string", `${source.id}: ${status}`);
+			assert.match(body, /^\{ message: '[^']*' \}(?: \| \{ message: '[^']*' \})*$/, `${source.id}: ${status}`);
+			checked++;
 		}
 	}
-	assert.ok(checked > 0, "Expected contextual source envelopes");
+	assert.ok(checked > 0);
 });
 
-test("successful responses, cookie metadata and stream frames are unchanged", () =>
+test("shared history status is updated with a required query and database optimistic locking", () =>
 {
-	for (const endpoint of sourceEndpoints)
+	const update = endpoint("ep-alert-history-update");
+	assert.deepEqual(update.request.query.map(({ name }) => name), ["status"]);
+	const status = update.request.query[0];
+	assert.equal(status.required, true);
+	for (const state of ["acknowledged", "resolved", "sent"]) assert.ok(shape(status.type).includes(state));
+	assert.ok(update.request.body == null || (Array.isArray(update.request.body) && update.request.body.length === 0));
+	assert.doesNotMatch(shape(update.request), /version/);
+	assert.match(shape(update.constraints), /optimistic/i);
+	assert.match(shape(update.constraints), /version/i);
+	const history = shape(update.response[200]);
+	for (const field of ["status", "owner_id", "acked_at", "acked_by", "resolved_at", "resolved_by", "rule"])
 	{
-		for (const [status, value] of Object.entries(endpoint.response ?? {}))
-		{
-			if (!/^[45]\d\d$/.test(status))
-			{
-				assert.strictEqual(response(endpoint.id, status), value, `${endpoint.id}: ${status}`);
-			}
-		}
+		assert.match(history, new RegExp(`\\b${field}\\b`));
 	}
+	assert.match(history, /rule\s*["']?\s*:\s*\{/);
+	assert.ok(update.tables.includes("alert_history"));
 });
 
-test("extra contract shapes normalize through exported ENDPOINTS", async (t) =>
+test("REST and WebSocket history transitions enforce ownership and preserve historical actors", () =>
 {
-	const suffix = " — { error: 'example only' } is explanatory text.";
-	const route = "/api/spec-test/{id}/{scope}/{id}/{parent_id}";
-	const fixtures = [
-		{
-			name: "preserves explanatory suffixes after error alternatives",
-			endpoint: {
-				id: "spec-test-suffix",
-				route: "/api/users/{id}",
-				response: { 409: response("ep-users-update", 409, spec.USERS_ENDPOINTS) + suffix },
-			},
-			status: 409,
-			expected: response("ep-users-update", 409) + suffix,
-		},
-		{
-			name: "preserves validation message alternatives without error codes",
-			endpoint: {
-				id: "spec-test-validation",
-				route,
-				request: {
-					body: [{ name: "id" }, { name: "email" }, { name: "id" }],
-					query: [{ name: "email" }, { name: "scope" }, { name: "id" }],
-				},
-				response: {
-					400: "{ error: 'invalid input', code: 'INVALID_INPUT' } | { error: 'missing input', code: 'MISSING_INPUT' }",
-				},
-			},
-			status: 400,
-			expected: "invalid input | missing input",
-		},
-	];
-
-	// Re-import only the barrel so in-memory fixtures exercise the published
-	// contract without exposing the private normalizer as a public API.
-	const originalLength = spec.AUTH_ENDPOINTS.length;
-	spec.AUTH_ENDPOINTS.push(...fixtures.map(({ endpoint }) => endpoint));
-	try
+	for (const id of ["ep-alert-history-update", "ep-alerts-ws"])
 	{
-		const { ENDPOINTS } = await import("../src/data/index.js?spec-contract-fixtures");
-		for (const { name, endpoint, status, expected } of fixtures)
-		{
-			await t.test(name, () =>
-			{
-				assert.equal(response(endpoint.id, status, ENDPOINTS), expected);
-			});
-		}
+		const criteria = shape(endpoint(id).constraints.criteria);
+		assert.match(criteria, /Only the acknowledging owner.*owner_id is non-null.*403.*no administrator bypass/, id);
+		assert.match(criteria, /Resolve caller identity from authentication, never from a supplied owner or actor email/, id);
+		assert.match(criteria, /Acknowledging unowned history claims owner_id for the caller/, id);
+		assert.match(criteria, /Re-acknowledging by the owner resets acked_at to now.*current email in acked_by.*status becomes acknowledged and resolved_at\/resolved_by are cleared/, id);
+		assert.match(criteria, /owner can resolve or re-acknowledge.*including a previously resolved record/, id);
+		assert.match(criteria, /Unowned history may be resolved directly without acknowledging first.*status resolved, resolved_at now and resolved_by to the caller email.*leave owner_id and acknowledgment fields unchanged/, id);
+		assert.match(criteria, /Resolving owned history preserves acknowledgment\/ownership fields/, id);
+		assert.match(criteria, /Returning to sent reopens history and clears owner_id and all acknowledgment\/resolution fields.*only be reopened by its owner/, id);
+		assert.match(criteria, /Deleting an owner sets owner_id to null without deleting history or clearing status, action timestamps or recorded actor emails/, id);
+		assert.match(criteria, /Actor emails are snapshots, not read-time joins/, id);
+		assert.match(criteria, /increment version on successful updates.*409.*Do not broadcast failed or rolled-back changes/, id);
 	}
-	finally
+	assert.equal(response("ep-alert-history-update", 403), "{ message: 'only the acknowledging owner may change this history' }");
+	assert.equal(response("ep-alert-history-update", 409), "{ message: 'conflicting history update' }");
+	for (const name of ["acked_by", "resolved_by"])
 	{
-		spec.AUTH_ENDPOINTS.splice(originalLength, fixtures.length);
+		const column = spec.SCHEMA.alert_history.columns.find((entry) => entry.name === name);
+		assert.equal(column.type, "TEXT");
+		assert.equal(column.fk, undefined, `${name} must survive actor deletion`);
+		assert.match(shape(column.notes), /snapshot retained on deletion\/email change/);
 	}
 });
 
+test("recipient notifications have cursor pagination and a required boolean seen query", () =>
+{
+	const list = endpoint("ep-alert-notifications-list");
+	assert.equal(list.method, "GET");
+	assert.equal(list.route, "/api/alerts/notifications");
+	assert.deepEqual(list.request.query.map(({ name }) => name), ["count", "before"]);
+	assert.match(shape(list.response[200]), /notifications/);
+	assert.match(shape(list.response[200]), /has_more/);
+	assert.ok(list.tables.includes("alert_notifications"));
+	const update = endpoint("ep-alert-notification-update");
+	assert.equal(update.method, "PUT");
+	assert.equal(update.route, "/api/alerts/notifications/{historyId}");
+	assert.deepEqual(update.request.query.map(({ name }) => name), ["seen"]);
+	assert.equal(update.request.query[0].required, true);
+	assert.match(shape(update.request.query[0].type), /bool/i);
+	assert.ok(update.request.body == null || (Array.isArray(update.request.body) && update.request.body.length === 0));
+	assert.ok(update.tables.includes("alert_notifications"));
+});
+
+test("notification updates are caller-scoped and preserve the first seen timestamp", () =>
+{
+	for (const id of ["ep-alert-notification-update", "ep-alerts-ws"])
+	{
+		const criteria = shape(endpoint(id).constraints.criteria);
+		assert.match(criteria, /keyed by \(user_id, alert_history_id\).*Resolve user_id from authentication, never client input/, id);
+		assert.match(criteria, /First marking seen sets seen_at to now; repeating seen=true preserves the existing seen_at/, id);
+		assert.match(criteria, /Marking seen=false clears seen_at/, id);
+		assert.match(criteria, /create a missing caller notification for existing history, including seen=false with seen_at=null/, id);
+		assert.match(criteria, /Unknown history returns 404 without creating a row/, id);
+		assert.match(criteria, /Commit the notification update before broadcasting Notification only to all connected sessions of that recipient.*never broadcast personal seen state to other users/, id);
+	}
+	const update = endpoint("ep-alert-notification-update");
+	assert.match(shape(update.constraints.criteria), /Atomic upsert keyed by caller user_id and alert_history_id preserves first seen_at across concurrent seen=true requests/);
+	assert.match(shape(endpoint("ep-alert-notifications-list").constraints.criteria), /Return only authenticated user notifications.*Shared history status and ownership never filter personal notification visibility/);
+	assert.equal(update.tables_actions.alert_notifications, "Upsert (caller only)");
+	assert.equal(endpoint("ep-alert-notifications-list").tables_actions.alert_notifications, "Read (caller only)");
+});
+
+test("schema separates shared history from per-recipient seen state", () =>
+{
+	assert.equal(spec.SCHEMA.alert_acks, undefined);
+	const notifications = spec.SCHEMA.alert_notifications;
+	assert.ok(notifications);
+	assert.deepEqual(notifications.columns.filter((column) => column.pk).map(({ name }) => name).sort(), ["alert_history_id", "user_id"]);
+	for (const [name, table] of [["user_id", "users"], ["alert_history_id", "alert_history"]])
+	{
+		assert.deepEqual(notifications.columns.find((column) => column.name === name).fk,
+			{ table, column: "id", onDelete: "CASCADE" });
+	}
+	for (const name of ["seen", "seen_at"]) assert.ok(notifications.columns.some((column) => column.name === name));
+	const columns = spec.SCHEMA.alert_history.columns;
+	for (const name of ["status", "owner_id", "acked_at", "acked_by", "resolved_at", "resolved_by", "version"])
+	{
+		assert.ok(columns.some((column) => column.name === name), name);
+	}
+	assert.deepEqual(columns.find((column) => column.name === "owner_id").fk,
+		{ table: "users", column: "id", onDelete: "SET NULL" });
+});
+
+test("WebSocket shares history updates and sends capitalized Notification frames without status frames", () =>
+{
+	const socket = endpoint("ep-alerts-ws");
+	for (const status of ["acknowledged", "resolved", "sent"]) assert.ok(shape(socket.request.ack).includes(status));
+	assert.match(shape(socket.request.notif), /seen/);
+	assert.match(shape(socket.request.notif), /bool/i);
+	for (const field of ["alert_history_id", "status", "acked_at", "acked_by", "resolved_at", "resolved_by"])
+	{
+		assert.ok(shape(socket.response.alert).includes(field), field);
+	}
+	assert.equal(socket.response.status, undefined);
+	assert.match(shape(socket.response), /type["']?\s*:\s*['"]Notification['"]/);
+	assert.doesNotMatch(shape(socket.response), /type["']?\s*:\s*['"]status['"]/);
+});
+
+test("alert and telemetry pagination detect an additional row rather than a full page", () =>
+{
+	for (const id of ["ep-alerts-list", "ep-alert-notifications-list", "ep-telemetry-metrics", "ep-telemetry-traces", "ep-telemetry-logs"])
+	{
+		const list = endpoint(id);
+		assert.match(shape(list.response[200]), /has_more/);
+		assert.match(shape(list.constraints.criteria), /count\s*\+\s*1|additional row|extra row/i);
+		assert.doesNotMatch(shape(list.constraints.criteria), /returned\.length === count/);
+	}
+	assert.doesNotMatch(shape(endpoint("ep-alerts-list")), /my_ack/);
+});
+
+test("raw telemetry count bounds are 1-500 and sorted offsets accept 0-500", () =>
+{
+	for (const id of ["ep-telemetry-metrics", "ep-telemetry-traces", "ep-telemetry-logs"])
+	{
+		const list = endpoint(id);
+		assert.ok(list.request.query.some((param) => param.name === "count"), id);
+		assert.match(shape(list.constraints.criteria), /400 returned if count is present but non-numeric or outside 1-500/, id);
+		if (id === "ep-telemetry-metrics") continue;
+		const offset = list.request.query.find((param) => param.name === "offset");
+		assert.ok(offset, id);
+		assert.equal(offset.required, false, id);
+		assert.match(shape(offset.type), /0-500.*non-default field/, id);
+		assert.match(shape(list.constraints.criteria), /offset is present but non-numeric or outside 0-500 \(zero is valid\)/, id);
+	}
+});
+
+test("JWT uses the current database role and rejects deleted users immediately", () =>
+{
+	const jwt = shape(spec.AUTH_STRATEGIES.JWT.items);
+	assert.match(jwt, /every authenticated HTTP request/i);
+	assert.match(jwt, /current database user\/role|current.*database.*role/i);
+	assert.match(jwt, /Missing\/deleted user returns 401/i);
+	assert.match(jwt, /not stale JWT claims/);
+});
+
+test("setup checks the current ADMIN count on every request and inside creation", () =>
+{
+	const status = shape(endpoint("ep-setup-status").constraints.criteria);
+	assert.match(status, /Every GET \/api\/setup request/);
+	assert.match(status, /countByRole\(ADMIN\) == 0/);
+	assert.match(status, /Existing non-admin users do not prevent setup/);
+	assert.match(shape(endpoint("ep-auth-setup").constraints.criteria), /countByRole\(ADMIN\).*creation transaction/);
+});
 
 test("one unversioned metadata callback replaces the signal-specific ingest routes", () =>
 {
@@ -315,18 +441,25 @@ test("one unversioned metadata callback replaces the signal-specific ingest rout
 	assert.match(callback.response[204], /synchronous evaluation and alert persistence/);
 	assert.equal(callback.response[202], undefined);
 	assert.equal(callback.response[409], undefined);
-	assert.match(response(callback.id, 400), /services\[0\]\.latest_timestamp/);
+	assert.equal(response(callback.id, 400), "{ message: '<validation message>' }");
 	for (const table of ["logs", "metrics", "traces"]) assert.equal(callback.tables_actions[table], "Read");
 });
 
-test("evaluation is synchronous and notifications are not persisted", () =>
+test("evaluation is synchronous and callback metadata is not persisted, unlike recipient notifications", () =>
 {
 	const callback = spec.ENDPOINTS.find((endpoint) => endpoint.id === "ep-alerts-trigger-evaluation");
+	assert.ok(spec.SCHEMA.alert_notifications, "Recipient notifications must be persisted");
+	assert.ok(callback.tables.includes("alert_notifications"));
+	assert.equal(callback.tables_actions.alert_notifications, "Insert (recipient rows on trigger)");
 	assert.equal(spec.SCHEMA.evaluation_notifications, undefined);
 	assert.ok(!callback.tables.includes("evaluation_notifications"));
 	assert.equal(callback.tables_actions.evaluation_notifications, undefined);
 	const criteria = JSON.stringify(callback.constraints.criteria);
 	assert.match(criteria, /Synchronous processing/);
+	assert.match(criteria, /alert_history and recipient alert_notifications rows in one PostgreSQL transaction/);
+	assert.match(criteria, /status=sent, owner_id\/acked_at\/acked_by\/resolved_at\/resolved_by=null and version=0/);
+	assert.match(criteria, /create alert_notifications for current recipient users with seen=false and seen_at=null in the same transaction/);
+	assert.match(criteria, /No callback-metadata table, background evaluation queue, or persisted evaluation-processing status/);
 	assert.match(criteria, /Return 204 only after evaluation succeeds/);
 	assert.match(criteria, /does not deduplicate callbacks/);
 	assert.match(criteria, /duplicate alert_history rows/);
@@ -363,6 +496,33 @@ test("published spec and architecture contain no obsolete ingest routes or IDs",
 	assert.equal(new Set(routes).size, routes.length);
 });
 
+
+test("page endpoint IDs and nested endpoint references resolve without stale routes", () =>
+{
+	const ids = new Set(spec.ENDPOINTS.map(({ id }) => id));
+	for (const page of PAGES)
+	{
+		for (const id of page.endpointIds) assert.ok(ids.has(id), `${page.id}: missing endpoint ${id}`);
+	}
+	function checkRefs(value, path)
+	{
+		if (value === null || typeof value !== "object") return;
+		for (const [key, child] of Object.entries(value))
+		{
+			if (key === "refs")
+			{
+				assert.ok(Array.isArray(child), `${path}.refs must be an array`);
+				for (const id of child)
+				{
+					if (id.startsWith("ep-")) assert.ok(ids.has(id), `${path}.refs: missing endpoint ${id}`);
+				}
+			}
+			checkRefs(child, `${path}.${key}`);
+		}
+	}
+	checkRefs(spec, "spec");
+	assert.doesNotMatch(shape(spec), /ep-alert-ack|\/api\/alerts\/ack\//);
+});
 
 test("callback services render as formatted JSON rather than object children", () =>
 {

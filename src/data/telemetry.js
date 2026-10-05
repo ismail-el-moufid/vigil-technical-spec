@@ -20,6 +20,21 @@ export const TELEMETRY_ENDPOINTS =
 					required: false
 				},
 				{
+				   name: "metric_name",
+				   type: "string — exact metrics.name filter; unknown names return no rows",
+				   required: false
+				},
+				{
+				   name: "interval",
+				   type: "1m | 5m | 15m | 1h | 1d — enables bucketed JSON mode",
+				   required: false
+				},
+				{
+				   name: "aggregation",
+				   type: "avg | sum | min | max | rate — required with interval; validated against stored OTLP metric metadata",
+				   required: false
+				},
+				{
 					name: "count",
 					type: "number",
 					required: false
@@ -44,11 +59,11 @@ export const TELEMETRY_ENDPOINTS =
 		},
 		response:
 		{
-			200: "{ data[], hasMore: boolean } — or, when format=csv, a text/csv body of the full matching dataset",
-			400: "{ error: '<validation message>' }",
-			401: "{ error: 'unauthorized' }",
-			429: "{ error: 'rate limited; retry in <seconds> seconds' }",
-			500: "{ error: 'server error' }",
+			200: "Raw mode: { data[], has_more: boolean }; format=csv: full matching raw dataset as text/csv. Bucketed mode: { interval, aggregation, data: [{ timestamp: <UTC bucket start>, service, metric_name, unit, value: <number | null> }] }; no pagination or has_more",
+			400: "{ message: '<single validation message>' }",
+			401: "{ message: 'unauthorized' }",
+			429: "{ message: 'rate limited; retry in <seconds> seconds' }",
+			500: "{ message: 'server error' }",
 		},
 		group: "Telemetry",
 		tables: ["metrics"],
@@ -56,13 +71,19 @@ export const TELEMETRY_ENDPOINTS =
 		constraints: {
 			criteria:
 			[
+				"Without interval, existing raw JSON pagination and CSV export remain unchanged; metric_name filters metrics.name in both modes. aggregation without interval returns 400.",
+				"Bucketed mode requires metric_name, aggregation and period (1h | 24h | 7d | 30d). interval must be 1m | 5m | 15m | 1h | 1d. Reject count, before, offset or format=csv in bucketed mode with 400. Maximum 2000 bucket/service results per request; reject larger requests with 400 rather than truncate or paginate.",
+				"Backend executes time-bucket aggregation in ClickHouse. Fix now once per request; query [now - period, now), align buckets to UTC epoch boundaries and order by timestamp then service. Keep services and metric names separate; apply existing service and vigil.internal filters before aggregation. Emit null for empty or uncomputable buckets, never invent zero activity. Unknown metric_name returns data: []. Edge buckets cover only the requested time range.",
+				"Type validation uses persisted OTLP metric_type, aggregation_temporality and is_monotonic, never metric-name heuristics. avg/sum/min/max accept gauges and non-monotonic delta sums as scalar samples. Monotonic sums support sum (interval increase) and rate (increase per second), not avg/min/max. Histograms support avg only in this initial contract, using combined interval sum / combined interval count, not an average of averages. Other type/aggregation combinations, missing metadata or mixed incompatible types/units return 400; percentile queries are not part of this change.",
+				"Compute counter increases and cumulative histogram sum/count differences per series_id before combining series by service/name. Read the preceding point before the range when available; honor start_timestamp changes and monotonic counter decreases as resets, never subtract across unrelated series. Delta points already describe [start_timestamp, timestamp]; cumulative differences describe the interval between observations. Allocate interval increases proportionally to overlapping requested buckets (uniform activity assumption); divide rate by the covered bucket duration in seconds, including partial edge buckets. Unresolvable baselines, gaps without a supported observation interval, or zero histogram count yield null. Preserve units for scalar/histogram averages; rate units are the original unit per second.",
+				"Collector exporter preserves OTLP identity/type/temporality and histogram sum/count rather than flattening every point into value. Existing rows receive metric_type=unknown and cannot participate in bucketed reads until reingested with metadata; raw reads remain available. This endpoint does not change alert-rule aggregation semantics.",
 				"Infinite scroll via keyset (cursor) pagination on timestamp, not offset — avoids row skip/duplicate drift as new metrics continuously insert ahead of the page",
-				"count defaults to 50 when omitted (json mode only; ignored under format=csv); hasMore derived server-side: returned.length === count",
+				"count defaults to 50 when omitted (json mode only; ignored under format=csv); fetch count + 1 matching rows after applying the cursor or offset, return at most count rows, and set has_more only when the additional row exists",
 				"400 returned if count is present but non-numeric or outside 1-500, or before is present but not a valid ISO8601 timestamp",
 				"400 also returned if period is present but not one of the recognized values (1h | 24h | 7d | 30d); service has no fixed vocabulary — an unrecognized value is treated as a legitimate filter that simply matches no rows, not a validation error",
 				"400 returned if format is present but not one of json | csv",
 				"Status page passes ?vigil.internal=true for infra metrics panel — intentional dual-call (service vs infra)",
-				"format=csv ignores count/before/offset and returns every row matching period/service/vigil.internal as one unpaginated CSV response — this is the actual mechanism behind the page's 'CSV export' feature, distinct from the paginated JSON view. Not exempt from the standard bucket, but doesn't need to be: the DEFAULT bucket (10 tokens, +10/60s, keyed by client IP) counts requests, not rows, so this one unpaginated response still consumes exactly one token, same as any small paginated GET",
+				"format=csv ignores count/before/offset and returns every row matching period/service/metric_name/vigil.internal as one unpaginated CSV response — this is the actual mechanism behind the page's 'CSV export' feature, distinct from the paginated JSON view. Not exempt from the standard bucket, but doesn't need to be: the DEFAULT bucket (10 tokens, +10/60s, keyed by client IP) counts requests, not rows, so this one unpaginated response still consumes exactly one token, same as any small paginated GET",
 			],
 			security: [],
 			rateLimit: "10 req/min",
@@ -94,7 +115,7 @@ export const TELEMETRY_ENDPOINTS =
 				},
 				{
 					name: "offset",
-					type: "number (fallback pagination when sort is set to a non-default field — a stable cursor isn't well-defined for arbitrary sort keys)",
+					type: "number (0-500; fallback pagination when sort is set to a non-default field — a stable cursor isn't well-defined for arbitrary sort keys)",
 					required: false
 				},
 				{
@@ -107,11 +128,11 @@ export const TELEMETRY_ENDPOINTS =
 		},
 		response:
 		{
-			200: "{ data[], hasMore: boolean } — or, when format=csv, a text/csv body of the full matching dataset",
-			400: "{ error: '<validation message>' }",
-			401: "{ error: 'unauthorized' }",
-			429: "{ error: 'rate limited; retry in <seconds> seconds' }",
-			500: "{ error: 'server error' }",
+			200: "{ data[], has_more: boolean } — or, when format=csv, a text/csv body of the full matching dataset",
+			400: "{ message: '<single validation message>' }",
+			401: "{ message: 'unauthorized' }",
+			429: "{ message: 'rate limited; retry in <seconds> seconds' }",
+			500: "{ message: 'server error' }",
 		},
 		group: "Telemetry",
 		tables: ["traces"],
@@ -121,9 +142,9 @@ export const TELEMETRY_ENDPOINTS =
 			[
 				"Default (time-descending) infinite scroll uses keyset pagination via 'before' — avoids row skip/duplicate drift under continuous inserts",
 				"Non-default sort falls back to 'offset'; drift under continuous inserts is an accepted limitation in that mode only, since sorted-but-not-by-time views are inherently harder to cursor",
-				"count defaults to 50 when omitted (json mode only; ignored under format=csv); hasMore derived server-side: returned.length === count",
+				"count defaults to 50 when omitted (json mode only; ignored under format=csv); fetch count + 1 matching rows after applying the cursor or offset, return at most count rows, and set has_more only when the additional row exists",
 				{
-					text: "400 returned if count/offset are present but non-numeric or outside 1-500 (same bound as the metrics endpoint), or before is present but not a valid ISO8601 timestamp, or sort references an unknown field",
+					text: "400 returned if count is present but non-numeric or outside 1-500, or offset is present but non-numeric or outside 0-500 (zero is valid), or before is present but not a valid ISO8601 timestamp, or sort references an unknown field",
 					refs: ["ep-telemetry-metrics"],
 				},
 				"400 also returned if period is present but not one of the recognized values (1h | 24h | 7d | 30d); service has no fixed vocabulary — an unrecognized value is treated as a legitimate filter that simply matches no rows, not a validation error",
@@ -186,7 +207,7 @@ export const TELEMETRY_ENDPOINTS =
 				},
 				{
 					name: "offset",
-					type: "number (fallback pagination when sort is set to a non-default field — a stable cursor isn't well-defined for arbitrary sort keys)",
+					type: "number (0-500; fallback pagination when sort is set to a non-default field — a stable cursor isn't well-defined for arbitrary sort keys)",
 					required: false
 				},
 				{
@@ -199,11 +220,11 @@ export const TELEMETRY_ENDPOINTS =
 		},
 		response:
 		{
-			200: "{ data[], hasMore: boolean } — or, when format=csv, a text/csv body of the full matching dataset",
-			400: "{ error: '<validation message>' }",
-			401: "{ error: 'unauthorized' }",
-			429: "{ error: 'rate limited; retry in <seconds> seconds' }",
-			500: "{ error: 'server error' }",
+			200: "{ data[], has_more: boolean } — or, when format=csv, a text/csv body of the full matching dataset",
+			400: "{ message: '<single validation message>' }",
+			401: "{ message: 'unauthorized' }",
+			429: "{ message: 'rate limited; retry in <seconds> seconds' }",
+			500: "{ message: 'server error' }",
 		},
 		group: "Telemetry",
 		tables: ["logs"],
@@ -213,9 +234,9 @@ export const TELEMETRY_ENDPOINTS =
 			[
 				"Default (time-descending) infinite scroll uses keyset pagination via 'before' — avoids row skip/duplicate drift under continuous inserts",
 				"Non-default sort falls back to 'offset'; drift under continuous inserts is an accepted limitation in that mode only, since sorted-but-not-by-time views are inherently harder to cursor",
-				"count defaults to 50 when omitted (json mode only; ignored under format=csv); hasMore derived server-side: returned.length === count",
+				"count defaults to 50 when omitted (json mode only; ignored under format=csv); fetch count + 1 matching rows after applying the cursor or offset, return at most count rows, and set has_more only when the additional row exists",
 				{
-					text: "400 returned if count/offset are present but non-numeric or outside 1-500 (same bound as the metrics endpoint), or before is present but not a valid ISO8601 timestamp, or sort references an unknown field",
+					text: "400 returned if count is present but non-numeric or outside 1-500, or offset is present but non-numeric or outside 0-500 (zero is valid), or before is present but not a valid ISO8601 timestamp, or sort references an unknown field",
 					refs: ["ep-telemetry-metrics"],
 				},
 				"400 also returned if period is present but not one of the recognized values (1h | 24h | 7d | 30d); service has no fixed vocabulary — an unrecognized value is treated as a legitimate filter that simply matches no rows, not a validation error",
@@ -429,9 +450,9 @@ export const TELEMETRY_ENDPOINTS =
 		response:
 		{
 			200: "[{ key: '<string>', values: ['<string>'] }]",
-			401: "{ error: 'unauthorized' }",
-			429: "{ error: 'rate limited; retry in <seconds> seconds' }",
-			500: "{ error: 'server error' }",
+			401: "{ message: 'unauthorized' }",
+			429: "{ message: 'rate limited; retry in <seconds> seconds' }",
+			500: "{ message: 'server error' }",
 		},
 		group: "Telemetry",
 		tables: ["logs", "metrics", "traces"],
