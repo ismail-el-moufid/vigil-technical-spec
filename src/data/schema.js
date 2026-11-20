@@ -1,48 +1,43 @@
 // ─── DB SCHEMA ────────────────────────────────────────────────────────────────
-// Canonical column definitions for every PostgreSQL table referenced across
-// the endpoint data files. Consumed by the TablesRow component in
-// EndpointComponents.jsx to render inline schema detail on each endpoint card.
+// Storage definitions used by endpoint cards. PostgreSQL details are inferred
+// from services/api/src/main/java/com/ft_transcendence/vigil/domain/entities
+// under Spring Boot/Hibernate naming defaults, not inspected live DDL.
+// Compose defaults ddl-auto=update; there is no versioned migration set.
+// ClickHouse definitions come from services/telemetry-db/clickhouse-init.sh.
+// That script grants vigil_api SELECT on the three telemetry tables and
+// vigil_writer INSERT/SELECT. PostgreSQL ORM updates and ClickHouse IF NOT EXISTS
+// initialization are not versioned, data-preserving upgrade migrations.
+// Logical table keys remain compatible with endpoint references; notes identify
+// physical-name differences. Consumed by TablesRow in EndpointComponents.jsx.
 //
 // Column shape:
-//   name        – column name
-//   type        – PostgreSQL type (shown as-is)
+//   name        – storage column name (API aliases are identified in notes)
+//   type        – PostgreSQL mapped type or explicit ClickHouse DDL type
 //   pk          – true if primary key
-//   fk          – { table, column, onDelete } if foreign key; onDelete states
-//                 the ON DELETE behavior (CASCADE | SET NULL | RESTRICT) —
-//                 every FK on a table whose parent row is actually deletable
-//                 in this spec must declare one, so no path leaves a dangling
-//                 FK or throws unhandled at the DB layer
+//   fk          – { table, column, onDelete } from mapped foreign-key behavior
 //   nullable    – true if nullable (omit / false = NOT NULL)
 //   unique      – true if has a unique constraint
-//   notes       – short implementation note shown inline (optional)
+//   notes       – implementation evidence or limitation shown inline
+// Existing PostgreSQL volumes may differ: ddl-auto=update is not proof that
+// every inferred column, constraint or type has been reconciled successfully.
 
 export const SCHEMA =
 {
 	users:
 	{
 		db: "PostgreSQL",
+		notes: "User.java explicitly maps users. String lengths/types and enum constraints follow Hibernate defaults, not handwritten migrations. UUID IDs use @GeneratedValue(GenerationType.UUID), not a declared gen_random_uuid() database default. The persisted API account is also a users row. No created_at/updated_at columns are declared by this entity.",
 		columns:
 		[
 			{
-				name: "id",
-				type: "UUID",
-				pk: true,
-				notes: "gen_random_uuid()"
+				name: "id", type: "UUID", pk: true,
+				notes: "Hibernate-generated UUID"
 			},
+			{ name: "email", type: "VARCHAR(255)", unique: true },
+			{ name: "password_hash", type: "VARCHAR(255)", notes: "BCrypt hash, via the configured PasswordEncoder" },
 			{
-				name: "email",
-				type: "TEXT",
-				unique: true
-			},
-			{
-				name: "password_hash",
-				type: "TEXT",
-				notes: "bcrypt"
-			},
-			{
-				name: "role",
-				type: "TEXT",
-				notes: "admin | viewer"
+				name: "role", type: "VARCHAR(255)",
+				notes: "EnumType.STRING stores ADMIN | VIEWER; JSON serializes admin | viewer"
 			},
 		],
 	},
@@ -50,42 +45,23 @@ export const SCHEMA =
 	sessions:
 	{
 		db: "PostgreSQL",
+		notes: "Session.java explicitly maps sessions; user deletion cascades. last_used_at has @UpdateTimestamp and an explicit timestamp-with-time-zone DEFAULT now(). No session cleanup scheduler is established by this mapping.",
 		columns:
 		[
+			{ name: "id", type: "UUID", pk: true, notes: "Hibernate-generated UUID" },
 			{
-				name: "id",
-				type: "UUID",
-				pk: true,
-				notes: "gen_random_uuid()"
+				name: "user_id", type: "UUID",
+				fk: { table: "users", column: "id", onDelete: "CASCADE" }
+			},
+			{ name: "user_agent", type: "VARCHAR(255)", nullable: true },
+			{ name: "ip_address", type: "VARCHAR(255)", nullable: true },
+			{
+				name: "last_used_at", type: "TIMESTAMPTZ",
+				notes: "DEFAULT now(); Hibernate @UpdateTimestamp and explicit update during token rotation"
 			},
 			{
-				name: "user_id",
-				type: "UUID",
-				fk: {
-					table: "users",
-					column: "id",
-					onDelete: "CASCADE"
-				}
-			},
-			{
-				name: "user_agent",
-				type: "TEXT",
-				nullable: true
-			},
-			{
-				name: "ip_address",
-				type: "TEXT",
-				nullable: true
-			},
-			{
-				name: "last_used_at",
-				type: "TIMESTAMPTZ",
-				notes: "updated in-place on every token rotation"
-			},
-			{
-				name: "revoked",
-				type: "BOOLEAN",
-				notes: "DEFAULT false; true = session killed (logout or reuse detected)"
+				name: "revoked", type: "BOOLEAN",
+				notes: "Explicit DEFAULT false; session revocation state"
 			},
 		],
 	},
@@ -93,223 +69,132 @@ export const SCHEMA =
 	refresh_tokens:
 	{
 		db: "PostgreSQL",
+		notes: "RefreshToken.java maps refresh_tokens, with cascading user/session foreign keys. UUIDs and issued_at are generated by Hibernate; issued_at also declares SQL DEFAULT now(). Raw refresh tokens are not persisted.",
 		columns:
 		[
+			{ name: "id", type: "UUID", pk: true, notes: "Hibernate-generated UUID" },
 			{
-				name: "id",
-				type: "UUID",
-				pk: true,
-				notes: "gen_random_uuid()"
-			},
-			{
-				name: "user_id",
-				type: "UUID",
+				name: "user_id", type: "UUID",
 				fk: { table: "users", column: "id", onDelete: "CASCADE" }
 			},
 			{
-				name: "session_id",
-				type: "UUID",
+				name: "session_id", type: "UUID",
 				fk: { table: "sessions", column: "id", onDelete: "CASCADE" }
 			},
 			{
-				name: "token_hash",
-				type: "TEXT",
-				unique: true,
-				notes: "SHA-256 of the raw token; raw value never stored. No application-level pre-insert uniqueness check is specified for this column, unlike users.email/webhooks.url: a collision would require two distinct randomly-generated tokens hashing identically, which is cryptographically negligible. Accepted scope decision — relies on the DB constraint alone, deliberately, rather than an oversight"
+				name: "token_hash", type: "VARCHAR(255)", unique: true,
+				notes: "Base64url-encoded SHA-256 from JjwtService.hashRefreshToken; raw token never stored. Database uniqueness constraint, no pre-insert collision query"
 			},
+			{ name: "issued_at", type: "TIMESTAMPTZ", notes: "@CreationTimestamp and explicit DEFAULT now()" },
+			{ name: "expires_at", type: "TIMESTAMPTZ" },
 			{
-				name: "issued_at",
-				type: "TIMESTAMPTZ",
-				notes: "DEFAULT now()"
+				name: "superseded", type: "BOOLEAN",
+				notes: "Explicit DEFAULT false; set on the old row when a refresh rotates its token"
 			},
-			{
-				name:"expires_at",
-				type: "TIMESTAMPTZ"
-			},
-			{
-				name: "superseded",
-				type: "BOOLEAN",
-				notes: "DEFAULT false; false = still the current token in chain, true = rotated away (set on the old row at the moment a refresh mints its replacement)"
-			},
-			{
-				name: "revoked",
-				type: "BOOLEAN",
-				notes: "DEFAULT false; true = session killed (logout or reuse detected)"
-			},
+			{ name: "revoked", type: "BOOLEAN", notes: "Explicit DEFAULT false; revocation state" },
 		],
 	},
 
 	alert_rules:
 	{
 		db: "PostgreSQL",
+		notes: "AlertRules.java explicitly maps alert_rules. Application validation lives in DTOs/AlertsService, not equivalent SQL CHECK constraints for every rule invariant. IngestService suppresses a new threshold alert when the rule already has a sent/acknowledged history row; this is not callback-ID deduplication or a database uniqueness constraint.",
 		columns:
 		[
+			{ name: "id", type: "UUID", pk: true, notes: "Hibernate-generated UUID" },
+			{ name: "service", type: "VARCHAR(255)" },
 			{
-				name: "id",
-				type: "UUID",
-				pk: true,
-				notes: "gen_random_uuid()"
-			},
-			{
-				name: "service",
-				type: "TEXT"
-			},
-			{
-				name: "signal_type",
-				type: "TEXT",
+				name: "signal_type", type: "VARCHAR(255)",
 				notes: {
-					text: "logs | metrics | traces — the single trigger-evaluation callback dispatches each notification to its signal_type evaluator, matching only enabled rules for that signal and each notified service. Each rule has exactly one signal_type; the other signal evaluators skip it. Set at creation, immutable thereafter — not accepted by the update endpoint's PATCH body under any circumstance, default-rule or not",
-					refs: [
-					   "ep-alerts-trigger-evaluation",
-					   "ep-alert-rules-update"
-					],
+					text: "EnumType.STRING: logs | metrics | traces. The unified callback evaluates enabled rules matching each service and signal. Set on creation; not accepted in the update DTO.",
+					refs: ["ep-alerts-trigger-evaluation", "ep-alert-rules-update"],
 				}
 			},
 			{
-				name: "metric_name",
-				type: "TEXT",
+				name: "metric_name", type: "VARCHAR(255)",
 				notes: {
-					text: "meaning and validation depend on signal_type. metrics: open vocabulary, matched literally against the ingested point's own 'name' field — validated at create/update time against the known attribute key list (unchanged behavior from before signal_type existed). logs: closed enum, one of error_count | warning_count | critical_count | total_count — maps to a severity filter (total_count = no severity filter); any other value is a 400 at create/update. traces: closed enum, one of error_rate | span_count | avg_duration_ms | p50_duration_ms | p95_duration_ms | p99_duration_ms | max_duration_ms; any other value is a 400 at create/update. The logs/traces enums exist specifically so metric_name never depends on an undocumented mapping inside the evaluator — every value it can take is enumerated here and in the create/update endpoints' 400 criteria",
+					text: "metrics: literal name match; validation against ingested metric names is still a TODO in AlertsService. logs: error_count | warning_count | critical_count | total_count. traces: error_rate | span_count | avg_duration_ms | p50_duration_ms | p95_duration_ms | p99_duration_ms | max_duration_ms. Logs/traces use application-validated closed vocabularies.",
 					refs: ["ep-alert-rules-create", "ep-alert-rules-update"],
 				}
 			},
 			{
-				name: "aggregation",
-				type: "TEXT",
-				nullable: true,
-				notes: "one of latest | avg | sum | min | max | count | p50 | p95 | p99. Required and meaningful only when signal_type = metrics: applied to 'value' across every point matching name = metric_name within the window, ending at the matching services entry's latest_timestamp (event time) in the trigger-evaluation notification — 'latest' takes just the single most recent matching point (this is the direct equivalent of the old pre-windowing instantaneous check, so existing metrics-rule behavior is expressible, not lost). Must be null when signal_type = logs | traces, since the aggregation there is already baked into metric_name's closed enum (e.g. p95_duration_ms already says 'p95 of duration_ms' — a separate aggregation value would be redundant and could disagree with it). A non-null aggregation on a logs/traces rule, or a null aggregation on a metrics rule, is a 400 at create/update time"
+				name: "aggregation", type: "VARCHAR(255)", nullable: true,
+				notes: "latest | avg | sum | min | max | count | p50 | p95 | p99 for metrics; null for logs/traces. Evaluation aggregates raw non-null value rows by service/name in the window. It does not use series_id/unit, compute counter rates or evaluate histogram distributions; histogram value is null and is excluded."
 			},
 			{
-				name: "window_seconds",
-				type: "INTEGER",
-				notes: "how far back from the matching services entry's latest_timestamp (event time) in the trigger-evaluation notification the evaluator looks when computing this rule's aggregate, for all three signal_types uniformly — this is the field that makes logs/traces/metrics evaluation symmetric; previously logs/traces referenced an undefined 'configured time window' with no backing column, and metrics had no window concept at all. Required at create time, minimum 10 (400 below that). Not the same knob as vigil.silence-timeout-seconds: that config measures silence from last_seen = max(stored_at) across valid callbacks on all signals, without refreshing on retries or older late delivery; window_seconds is how far back a single threshold rule looks when a notification is evaluated, over all stored rows in the window, not only rows with its notification_id — the two are unrelated and can differ freely"
+				name: "window_seconds", type: "INTEGER",
+				notes: "Rule window ending at callback services[].latest_timestamp: timestamp > end - window_seconds AND timestamp <= end. Reads all relevant stored rows, not only this notification ID. Independent of the stored_at-based silence timeout."
 			},
 			{
-				name: "threshold",
-				type: "NUMERIC",
-				notes: "rule triggers when the aggregated value (per aggregation/metric_name above) is >= threshold; one direction only, no operator choice. Units follow metric_name: raw counts for *_count/span_count, a 0..1 fraction for error_rate (0.05 = 5%), milliseconds for *_duration_ms, and whatever unit the underlying point carries for signal_type = metrics"
+				name: "threshold", type: "DOUBLE PRECISION",
+				notes: "Java Double, not NUMERIC. Triggers when a non-null aggregate >= threshold; error_rate is a 0..1 fraction, duration metrics are milliseconds."
 			},
-			{
-				name: "severity",
-				type: "TEXT",
-				notes: "info | warning | critical"
-			},
-			{
-				name: "enabled",
-				type: "BOOLEAN",
-				notes: "DEFAULT true"
-			},
-			{
-				name: "is_default",
-				type: "BOOLEAN",
-				notes: "DEFAULT false; default rules not deletable"
-			},
+			{ name: "severity", type: "VARCHAR(255)", notes: "EnumType.STRING: info | warning | critical" },
+			{ name: "enabled", type: "BOOLEAN", notes: "Supplied by application code; no SQL DEFAULT true declared in the entity" },
 		],
 	},
 
 	alert_history:
 	{
 		db: "PostgreSQL",
-		notes: "No automatic expiry; alert history is retained until an explicit cleanup policy is introduced. Included in daily encrypted off-host PostgreSQL backups retained for 7 days.",
+		notes: "No automatic expiry or backup job is supplied. AlertHistory.java explicitly maps alert_history; Hibernate manages UUIDs and @Version. Physical ownership column is inferred as user_id from the user relation, not owner_id (the API field). Nullable rule/user foreign keys use SET NULL. Snapshots survive rule edits/deletion. Actual existing-volume DDL has not been inspected; ddl-auto=update is not a versioned migration strategy.",
 		columns:
 		[
+			{ name: "id", type: "UUID", pk: true, notes: "Hibernate-generated UUID" },
 			{
-				name: "id",
-				type: "UUID",
-				pk: true,
-				notes: "gen_random_uuid()"
-			},
-			{
-				name: "rule_id",
-				type: "UUID",
+				name: "rule_id", type: "UUID", nullable: true,
 				fk: { table: "alert_rules", column: "id", onDelete: "SET NULL" },
-				nullable: true,
-				notes: "SET NULL, not CASCADE — alert_history is a historical record; deleting the rule that produced a past alert should not delete the alert. Non-default alert_rules rows are deletable (default rows can only be disabled, never deleted), so history retains its evaluation-time snapshot independently of the current rule. null is genuinely ambiguous on its own — it means EITHER 'rule since deleted' (this SET NULL firing) OR 'no rule ever matched' (a silence-watchdog alert — fired when a service goes quiet for too long, never backed by an alert_rules row to begin with). The two cases are distinguished by metric_name, not by rule_id: metric_name === 'service_silent' is the silence-watchdog case; any other metric_name with rule_id === null is the deleted-rule case. Consumers must branch on metric_name, not treat null rule_id as self-describing. This is a deliberate tradeoff, not an oversight: a dedicated discriminator column (e.g. source: 'rule' | 'silence_watchdog') would remove the ambiguity at the schema level, but was judged not worth a fourth column when metric_name already forces every consumer to branch on it anyway for unrelated reasons (rendering the alert's title/description) — reusing that existing branch point over adding a column whose only job would be disambiguation"
+				notes: "Nullable relation. Null can mean a deleted rule or a silence alert with no rule; metric_name = service_silent identifies the silence path."
+			},
+			{ name: "service", type: "VARCHAR(255)" },
+			{
+				name: "triggered_at", type: "TIMESTAMPTZ",
+				notes: "Explicit DEFAULT now(), but evaluation supplies latest_timestamp; the silence path supplies Instant.now()"
 			},
 			{
-				name: "service",
-				type: "TEXT"
-			},
-			{ name: "triggered_at", type: "TIMESTAMPTZ" },
-			{
-			   name: "status",
-			   type: "TEXT",
-			   notes: "sent | acknowledged | resolved; DEFAULT sent; shared by all users"
+				name: "status", type: "VARCHAR(255)",
+				notes: "EnumType.STRING: sent | acknowledged | resolved; application sets sent on creation, no SQL DEFAULT declared. Shared across users."
 			},
 			{
-			   name: "owner_id",
-			   type: "UUID",
-			   nullable: true,
-			   fk: { table: "users", column: "id", onDelete: "SET NULL" },
-			   notes: "Acknowledging owner; only this user may change owned history. Deleting owner preserves status, actor emails and timestamps"
+				name: "user_id", type: "UUID", nullable: true,
+				fk: { table: "users", column: "id", onDelete: "SET NULL" },
+				notes: "Physical column inferred from AlertHistory.user; exposed as owner_id by the API. Acknowledging owner controls owned history. Deletion clears the relation, not status or actor email snapshots."
 			},
 			{
-			   name: "acked_at",
-			   type: "TIMESTAMPTZ",
-			   nullable: true,
-			   notes: "Re-acknowledgment resets to now; reopening to sent clears"
+				name: "acked_at", type: "TIMESTAMPTZ", nullable: true,
+				notes: "Re-acknowledgment resets to now; reopening to sent clears; precision follows the Hibernate Instant mapping"
 			},
 			{
-			   name: "acked_by",
-			   type: "TEXT",
-			   nullable: true,
-			   notes: "Actor email snapshot retained on deletion/email change; reopening to sent clears"
+				name: "acked_by", type: "VARCHAR(255)", nullable: true,
+				notes: "Actor email snapshot retained on deletion/email change; reopening to sent clears"
 			},
 			{
-			   name: "resolved_at",
-			   type: "TIMESTAMPTZ",
-			   nullable: true,
-			   notes: "Resolution timestamp, including direct resolution without owner; re-acknowledgment or reopening clears"
+				name: "resolved_at", type: "TIMESTAMPTZ", nullable: true,
+				notes: "Direct or owned resolution timestamp; re-acknowledgment/reopening clears"
 			},
 			{
-			   name: "resolved_by",
-			   type: "TEXT",
-			   nullable: true,
-			   notes: "Actor email snapshot retained on deletion/email change; re-acknowledgment or reopening clears"
+				name: "resolved_by", type: "VARCHAR(255)", nullable: true,
+				notes: "Actor email snapshot retained on deletion/email change; re-acknowledgment/reopening clears"
 			},
 			{
-			   name: "version",
-			   type: "BIGINT",
-			   notes: "DEFAULT 0; optimistic-lock version increments on successful updates; concurrent conflicts can return 409. No client version input required"
+				name: "version", type: "BIGINT", nullable: true,
+				notes: "Boxed Long @Version has no explicit nullable=false or SQL DEFAULT 0; nullable here records mapping metadata, not a promise that managed rows have null versions. Initialized/incremented by ORM. Repository LLM analysis update explicitly increments version too. Concurrent optimistic-lock conflicts can return 409; no client version input required."
 			},
+			{ name: "metric_name", type: "VARCHAR(255)", notes: "Evaluation-time snapshot, or service_silent for a watchdog alert" },
 			{
-				name: "metric_name",
-				type: "TEXT",
-				notes: "snapshotted from the matching alert_rules row's own metric_name at insert time — not a live join, so the API can render this value on an alert straight off this table with no join to alert_rules, and it stays fixed even if that rule is later edited or has its own metric_name changed (rule_id going null via the SET NULL above covers the deleted case)"
+				name: "signal_type", type: "VARCHAR(255)", nullable: true,
+				notes: "Rule snapshot logs | metrics | traces; null for shared cross-signal silence detection using max(stored_at)"
 			},
+			{ name: "window_seconds", type: "INTEGER", nullable: true, notes: "Rule snapshot; null for silence alerts" },
+			{ name: "aggregation", type: "VARCHAR(255)", nullable: true, notes: "Rule snapshot; null for logs/traces and silence alerts" },
 			{
-				name: "signal_type",
-				type: "TEXT",
-				nullable: true,
-				notes: "snapshotted from alert_rules at insert time, same reasoning as metric_name. Null specifically for a silence-watchdog alert (rule_id also null there) — a silence alert isn't produced by any one signal type's evaluator, since the shared watchdog uses last_seen = max(stored_at) across all signal types, not callback receipt time; retries and older late deliveries cannot extend freshness; treat signal_type === null the same way as metric_name === 'service_silent' (an expected, self-describing case), not as a missing/erroneous value"
+				name: "threshold", type: "DOUBLE PRECISION", nullable: true,
+				notes: "Java Double rule snapshot; null for service_silent, not a required NUMERIC column"
 			},
+			{ name: "severity", type: "VARCHAR(255)", notes: "Rule snapshot info | warning | critical; silence alerts are critical" },
 			{
-				name: "window_seconds",
-				type: "INTEGER",
-				nullable: true,
-				notes: "snapshotted from alert_rules at insert time, same reasoning as metric_name. Null for a silence-watchdog alert, same reasoning as signal_type above — there's no window to snapshot when no rule fired"
-			},
-			{
-				name: "aggregation",
-				type: "TEXT",
-				nullable: true,
-				notes: "snapshotted from alert_rules at insert time, same reasoning as metric_name. Null both for a silence-watchdog alert and for any logs/traces-sourced alert, since aggregation is only ever non-null on signal_type = metrics rules to begin with"
-			},
-			{
-				name: "threshold",
-				type: "NUMERIC",
-				notes: "snapshotted from alert_rules at insert time, same reasoning as metric_name"
-			},
-			{
-				name: "severity",
-				type: "TEXT",
-				notes: "info | warning | critical; snapshotted from alert_rules at insert time, same reasoning as metric_name"
-			},
-			{
-				name: "llm_analysis",
-				type: "TEXT",
-				nullable: true,
-				notes: "null until FastAPI completes; 'Analysis unavailable' on timeout"
+				name: "llm_analysis", type: "TEXT", nullable: true,
+				notes: "Initially null; automatic analysis is persisted asynchronously, or 'Analysis unavailable' after failure. Lost queued work on restart can leave null indefinitely. Interactive questions/answers are not stored here."
 			},
 		],
 	},
@@ -317,71 +202,49 @@ export const SCHEMA =
 	alert_notifications:
 	{
 		db: "PostgreSQL",
-		notes: "PK (user_id, alert_history_id); personal seen state, independent of shared status and ownership. Created on trigger unseen; PUT may create a missing caller row. Recipient and history deletion both cascade.",
+		notes: "Logical key retained for endpoint references. AlertNotification.java has no explicit @Table; default Hibernate naming implies physical alert_notification (singular), not alert_notifications. PK (user_id, alert_history_id) comes from @EmbeddedId/@MapsId. Both relations declare ON DELETE CASCADE. AlertsService saves one unseen recipient row for every current users row in the same transaction as history. Personal seen state is independent of shared history status; PUT can create a missing caller row.",
 		columns:
 		[
 			{
-			   name: "user_id",
-			   type: "UUID",
-			   pk: true,
-			   fk: { table: "users", column: "id", onDelete: "CASCADE" }
+				name: "user_id", type: "UUID", pk: true,
+				fk: { table: "users", column: "id", onDelete: "CASCADE" }
 			},
 			{
-			   name: "alert_history_id",
-			   type: "UUID",
-			   pk: true,
-			   fk: { table: "alert_history", column: "id", onDelete: "CASCADE" }
+				name: "alert_history_id", type: "UUID", pk: true,
+				fk: { table: "alert_history", column: "id", onDelete: "CASCADE" }
 			},
 			{
-			   name: "seen",
-			   type: "BOOLEAN",
-			   notes: "DEFAULT false; first true sets seen_at, repeated true preserves it"
+				name: "seen", type: "BOOLEAN",
+				notes: "Primitive boolean defaults false in Java; columnDefinition declares DEFAULT false. First true sets seen_at; repeated true preserves it. Nullability follows Hibernate primitive-property mapping; deployed DDL was not inspected."
 			},
-			{
-			   name: "seen_at",
-			   type: "TIMESTAMPTZ",
-			   nullable: true,
-			   notes: "null when unseen; marking unseen clears timestamp"
-			},
+			{ name: "seen_at", type: "TIMESTAMPTZ", nullable: true, notes: "Null when unseen; marking unseen clears timestamp" },
 		],
 	},
 
 	webhooks:
 	{
 		db: "PostgreSQL",
+		notes: "Webhook.java maps webhooks and declares only ID/URL with default String length, not TEXT. No delivery log, retry state, outbox or per-webhook signing secret is stored. URL/DNS safety is application validation, not a database CHECK; VARCHAR(255) storage has no corresponding DTO @Size(max=255), so an otherwise valid long URL can fail at persistence. Webhook delivery is best-effort after automatic analysis persistence/broadcast.",
 		columns:
 		[
-			{
-				name: "id",
-				type: "UUID",
-				pk: true,
-				notes: "gen_random_uuid()"
-			},
-			{ name: "url", type: "TEXT",  unique: true },
+			{ name: "id", type: "UUID", pk: true, notes: "Hibernate-generated UUID" },
+			{ name: "url", type: "VARCHAR(255)", unique: true },
 		],
 	},
 
 	logs:
 	{
 		db: "ClickHouse",
-		notes: "Single-node MergeTree with persistent storage. PARTITION BY toYYYYMM(timestamp); ORDER BY (service, timestamp); TTL timestamp + INTERVAL 30 DAY DELETE. Synchronous inserts; backend queries the same instance. TTL cleanup is asynchronous, not immediate erasure. Daily encrypted off-host backups retained for 7 days.",
+		notes: "Explicit DDL in services/telemetry-db/clickhouse-init.sh: single-node MergeTree on clickhouse_data. PARTITION BY toYYYYMM(timestamp); ORDER BY (service, timestamp); TTL timestamp + INTERVAL 30 DAY DELETE. Synchronous inserts and count-by-notification visibility check; API queries the same instance. TTL cleanup is asynchronous. CREATE TABLE IF NOT EXISTS does not migrate existing tables. No automated off-host backup is supplied.",
 		columns:
 		[
+			{ name: "service", type: "String" },
+			{ name: "timestamp", type: "DateTime64(3, 'UTC')" },
+			{ name: "severity", type: "String", notes: "Collector normalizes OTLP severity numbers/text; unspecified if unrecognized" },
+			{ name: "message", type: "String" },
 			{
-				name: "service",
-				type: "String"
-			},
-			{ name: "timestamp", type: "DateTime64(3)" },
-			{ name: "severity",  type: "String" },
-			{
-				name: "message",
-				type: "String"
-			},
-			{
-				name: "attributes",
-				type: "Map(String, String)",
-				nullable: true,
-				notes: "Writer stamps reserved attributes['vigil.notification_id'] after row dedup and before storage, overwriting any client value. Matches the callback notification_id for exact-row SSE queries; evaluation windows are not restricted to this ID. Uses the existing attributes map, not a new ClickHouse table"
+				name: "attributes", type: "Map(String, String)",
+				notes: "Non-null map. Collector merges resource/record attributes, computes row dedup key, then overwrites reserved vigil.notification_id before inserting retained rows. Exact-ID SSE queries use it; evaluation windows do not. No dedicated log trace_id column: producers can include trace identifiers in attributes; exporter does not copy the OTLP log's intrinsic TraceID into this map."
 			},
 		],
 	},
@@ -389,72 +252,49 @@ export const SCHEMA =
 	metrics:
 	{
 		db: "ClickHouse",
-		notes: "Single-node MergeTree with persistent storage. PARTITION BY toYYYYMM(timestamp); ORDER BY (service, name, timestamp); TTL timestamp + INTERVAL 30 DAY DELETE. Synchronous inserts; backend queries the same instance. TTL cleanup is asynchronous, not immediate erasure. Daily encrypted off-host backups retained for 7 days.",
+		notes: "Explicit single-node MergeTree DDL on clickhouse_data. PARTITION BY toYYYYMM(timestamp); ORDER BY (service, name, timestamp); TTL timestamp + INTERVAL 30 DAY DELETE. Synchronous inserts and count-by-notification visibility check; API queries the same instance. TTL cleanup is asynchronous; no automated off-host backup is supplied. CREATE TABLE IF NOT EXISTS does not add these columns to an older table. Full histogram bucket distributions/exemplars are not persisted.",
 		columns:
 		[
+			{ name: "service", type: "String" },
+			{ name: "timestamp", type: "DateTime64(3, 'UTC')" },
+			{ name: "name", type: "String" },
 			{
-				name: "service",
-				type: "String"
+				name: "value", type: "Nullable(Float64)", nullable: true,
+				notes: "Scalar gauge/sum value; null for histograms. Collector rejects nonfinite values and integers outside the exact Float64 range. Scalar rule SQL explicitly excludes null values."
 			},
 			{
-				name: "timestamp",
-				type: "DateTime64(3)"
+				name: "metric_type", type: "LowCardinality(String)",
+				notes: "Collector emits gauge | sum | histogram | exponential_histogram. Summary/unsupported OTLP types reject the incoming batch. The chart query filters only nonempty types, not an explicit supported-type enum."
 			},
 			{
-				name: "name",
-				type: "String"
+				name: "unit", type: "String",
+				notes: "Original OTLP unit. Chart final grouping uses service/name/bucket and any(unit), so mixed units are not safely separated."
 			},
 			{
-				name: "value",
-				type: "Nullable(Float64)",
-				notes: "Scalar gauge/sum value; null for histograms. Existing scalar alert evaluation must exclude histogram rows rather than treat missing values as zero"
+				name: "aggregation_temporality", type: "LowCardinality(String)",
+				notes: "delta | cumulative for sums/histograms; unspecified for gauges or unspecified OTLP temporality"
+			},
+			{ name: "is_monotonic", type: "Nullable(Bool)", nullable: true, notes: "OTLP Sum.is_monotonic; null for other types" },
+			{
+				name: "start_timestamp", type: "Nullable(DateTime64(3, 'UTC'))", nullable: true,
+				notes: "OTLP point start time, null when absent. Stored and included in metric dedup identity, but current chart SQL does not use it for reset detection or delta interval allocation."
 			},
 			{
-			   name: "metric_type",
-			   type: "LowCardinality(String)",
-			   notes: "OTLP gauge | sum | histogram | exponential_histogram | summary; unknown for legacy rows. Never inferred from name. Initial bucket API rejects summary and unknown"
+				name: "series_id", type: "String",
+				notes: "Stable SHA-256 of service, resource attributes, scope name/version/attributes, metric name/unit/type/temporality/monotonicity and original point attributes, before exporter ID stamping. Chart SQL differences cumulative rows per series_id, then groups together service/name/bucket; label/type/unit distinctions are not preserved in its final series identity."
 			},
 			{
-			   name: "unit",
-			   type: "String",
-			   notes: "Original OTLP metric unit; do not silently mix units"
+				name: "histogram_sum", type: "Nullable(Float64)", nullable: true,
+				notes: "Histogram/exponential-histogram sum when present. Bucket boundaries/count arrays are not stored, so distribution percentiles cannot be reconstructed."
 			},
 			{
-			   name: "aggregation_temporality",
-			   type: "LowCardinality(String)",
-			   notes: "delta | cumulative for sums/histograms; unspecified for gauges/summaries/legacy rows"
+				name: "histogram_count", type: "Nullable(UInt64)", nullable: true,
+				notes: "Histogram sample count. Chart SQL differences cumulative counts/sums within the selected window; no pre-window baseline is loaded."
 			},
 			{
-			   name: "is_monotonic",
-			   type: "Nullable(Bool)",
-			   notes: "OTLP Sum.is_monotonic; null for other types or unknown metadata"
-			},
-			{
-			   name: "start_timestamp",
-			   type: "Nullable(DateTime64(3))",
-			   notes: "OTLP point start time, needed for delta intervals and reset detection; null when unavailable"
-			},
-			{
-			   name: "series_id",
-			   type: "String",
-			   notes: "Stable hash of service, all resource attributes, instrumentation scope, metric name/unit/type/temporality and original point attributes; excludes exporter-added vigil.notification_id. Keeps instances and label sets distinct for reset-aware calculations"
-			},
-			{
-			   name: "histogram_sum",
-			   type: "Nullable(Float64)",
-			   notes: "Original histogram/exponential-histogram sum when present; missing sums cannot produce averages"
-			},
-			{
-			   name: "histogram_count",
-			   type: "Nullable(UInt64)",
-			   notes: "Original histogram/exponential-histogram sample count; cumulative values require per-series differencing before weighted averages"
-			},
-			{
-				name: "attributes",
-				type: "Map(String, String)",
-				nullable: true,
+				name: "attributes", type: "Map(String, String)",
 				notes: {
-					text: "The metrics endpoint's ?vigil.internal=true filter is implemented as attributes['internal'] = 'true' here — there is no dedicated 'internal' column. Writer stamps reserved attributes['vigil.notification_id'] after row dedup and before storage, overwriting any client value, to correlate exact persisted rows for callback-driven SSE; evaluation windows are not restricted to this ID",
+					text: "Non-null map. ?vigil.internal=true maps to attributes['internal'] = 'true', not a dedicated column. Exporter overwrites vigil.notification_id for exact-row callback/SSE correlation; rule windows are not restricted to this ID.",
 					refs: ["ep-telemetry-metrics"],
 				}
 			},
@@ -464,43 +304,20 @@ export const SCHEMA =
 	traces:
 	{
 		db: "ClickHouse",
-		notes: "Single-node MergeTree with persistent storage. PARTITION BY toYYYYMM(timestamp); ORDER BY (service, timestamp, trace_id, span_id); TTL timestamp + INTERVAL 30 DAY DELETE. Synchronous inserts; backend queries the same instance. TTL cleanup is asynchronous, not immediate erasure. Daily encrypted off-host backups retained for 7 days.",
+		notes: "Explicit single-node MergeTree DDL on clickhouse_data. PARTITION BY toYYYYMM(timestamp); ORDER BY (service, timestamp, trace_id, span_id); TTL timestamp + INTERVAL 30 DAY DELETE. Synchronous inserts and count-by-notification visibility check; API queries the same instance. TTL cleanup is asynchronous. CREATE TABLE IF NOT EXISTS does not migrate existing tables; no automated off-host backup is supplied. ORDER BY is not a uniqueness constraint; Collector trace-ID/span-ID dedup is memory-only.",
 		columns:
 		[
+			{ name: "trace_id", type: "String" },
+			{ name: "span_id", type: "String" },
+			{ name: "parent_span_id", type: "Nullable(String)", nullable: true },
+			{ name: "name", type: "String" },
+			{ name: "service", type: "String" },
+			{ name: "timestamp", type: "DateTime64(3, 'UTC')", notes: "Span start time truncated to milliseconds" },
+			{ name: "duration_ms", type: "UInt32", notes: "Whole milliseconds truncated from end-start; reversed timestamps/overflow reject the batch" },
+			{ name: "status", type: "String", notes: "unset | ok | error from OTLP span status" },
 			{
-				name: "trace_id",
-				type: "String"
-			},
-			{
-				name: "span_id",
-				type: "String"
-			},
-			{ name: "parent_span_id",  type: "String",nullable: true },
-			{
-				name: "name",
-				type: "String"
-			},
-			{
-				name: "service",
-				type: "String"
-			},
-			{
-				name: "timestamp",
-				type: "DateTime64(3)"
-			},
-			{
-				name: "duration_ms",
-				type: "UInt32"
-			},
-			{
-				name: "status",
-				type: "String"
-			},
-			{
-				name: "attributes",
-				type: "Map(String, String)",
-				nullable: true,
-				notes: "Writer stamps reserved attributes['vigil.notification_id'] after row dedup and before storage, overwriting any client value. Matches the callback notification_id for exact-row SSE queries; evaluation windows are not restricted to this ID. Uses the existing attributes map, not a new ClickHouse table"
+				name: "attributes", type: "Map(String, String)",
+				notes: "Non-null merged resource/span map. Exporter overwrites vigil.notification_id before storage for exact-row SSE correlation; evaluation windows are not restricted to this ID. No extra correlation table."
 			},
 		],
 	},

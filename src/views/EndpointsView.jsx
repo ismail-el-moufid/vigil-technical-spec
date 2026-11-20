@@ -171,10 +171,7 @@ export default function EndpointsView({ highlightId })
 
 	return (
 		<div>
-			<div className="panel-title">Endpoints</div>
-			<div className="panel-sub">
-				{ENDPOINTS.length} total across all services
-			</div>
+			<h1 className="screen-reader-only">Endpoints</h1>
 
 			<HotkeyScope>
 				{metaGroups.map(([meta, eps]) =>

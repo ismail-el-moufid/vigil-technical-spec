@@ -32,7 +32,7 @@ const SESSION_HINT_COOKIE =
 	note: "Value=1; JavaScript-readable on app pages. Set alongside refresh_token with the same expiry, including after rotation. Not proof of login: the server ignores this hint when authenticating requests.",
 };
 
-const SESSION_HINT_PURPOSE = "Logged out and opening or reloading the app: no session_hint means skip the refresh request that would only return 401, then use GET /api/setup to choose /login or /setup. Logged in and reloading: session_hint=1 means call POST /api/auth/refresh to get a new access token, because reloading cleared the old one from memory. This saves only the pointless refresh request for a logged-out visitor; it saves no request or database work for a logged-in user.";
+const SESSION_HINT_PURPOSE = "Implemented: on initial load AuthProvider checks session_hint before refresh; no hint skips refresh. ProtectedRoute redirects unauthenticated visitors to /auth/login, where AuthEntryGuard calls GET /api/setup to choose /auth/login or /auth/setup. With a hint, refresh is followed by GET /api/users/me to restore identity. In-session apiFetch retries a 401 through one shared refresh promise without rechecking the hint. Access tokens remain in memory only.";
 const CLEAR_SESSION_COOKIES = "Clear both cookies with Max-Age=0 using their original paths: refresh_token at /api/auth and session_hint at /. A hint can be stale or edited, so it never proves the user is logged in.";
 
 export const AUTH_ENDPOINTS =
@@ -51,8 +51,9 @@ export const AUTH_ENDPOINTS =
 		response:
 		{
 			200: "true | false — setupRequired (raw JSON boolean)",
-			429: "{ message: 'rate limited; retry in <seconds> seconds' }",
-			500: "{ message: 'server error' }",
+			401: "{ message: '<filter authentication failure>' } — supplied invalid Authorization or token query",
+			429: "{ message: 'rate limited. Try again in <seconds> seconds.' }",
+			500: "Unhandled server/framework failure; no catch-all message-envelope guarantee",
 		},
 		group: "Setup",
 		tables: ["users"],
@@ -60,11 +61,11 @@ export const AUTH_ENDPOINTS =
 		constraints: {
 			criteria: [
 				"Every GET /api/setup request queries users with countByRole(ADMIN) and returns setupRequired = (countByRole(ADMIN) == 0)",
-				"Existing non-admin users do not prevent setup; any current ADMIN user, including the persisted API-key user, makes setupRequired false",
+				"GET is informational: existing non-admin users do not prevent it returning true; any current ADMIN user, including the persisted API-key user, makes setupRequired false. Implementation gap: POST checks total user count instead, so a viewer-only database returns true here but rejects creation with 409.",
 				"No startup cache or persisted setup-completion flag is used; the next request reflects the current admin count"
 			],
 			security: [],
-			rateLimit: "10 req/min",
+			rateLimit: "JWT: 60/min per user + method + URI; anonymous: 60/min per IP + method + URI; login: 10/min per IP; ApiKey: shared 10/min per IP",
 			realtime: "None",
 			fallback: "None",
 			dedup: "None",
@@ -94,10 +95,11 @@ export const AUTH_ENDPOINTS =
 				body: "{ role: 'admin', access_token }",
 				cookies: [REFRESH_TOKEN_COOKIE, SESSION_HINT_COOKIE]
 			},
-			400: "{ message: '<validation message>' }",
-			409: "{ message: 'setup already completed' }",
-			429: "{ message: 'rate limited; retry in <seconds> seconds' }",
-			500: "{ message: 'server error' }",
+			400: "{ message: 'invalid request' }",
+			401: "{ message: '<filter authentication failure>' } — supplied invalid Authorization or token query",
+			409: "{ message: 'setup already completed' } | { message: 'resource already exists' } (database integrity conflict)",
+			429: "{ message: 'rate limited. Try again in <seconds> seconds.' }",
+			500: "Unhandled server/framework failure; no catch-all message-envelope guarantee",
 		},
 		group: "Setup",
 		tables: ["users", "sessions", "refresh_tokens"],
@@ -112,15 +114,15 @@ export const AUTH_ENDPOINTS =
 				SESSION_HINT_PURPOSE,
 				"Hashed/salted passwords",
 				"Frontend + backend validation",
-				"mustbe@api.email is reserved for the API-key user; submitting it as the human admin email returns 400 with a validation message",
-				"400 returned if email is missing, not a string, or not a well-formed email address, or if password is missing, not a string, or does not meet the password-strength pattern",
-				"All custom HTTP exception responses use { message: '<message>' }, including validation, authentication, authorization, conflict, rate-limit, and server errors; never raw strings, error fields, field-error maps, or contextual envelopes",
-				"First-admin creation is serialized in-process and independently checks countByRole(ADMIN) inside the creation transaction; a nonzero count returns 409. The check and inserts are atomic so only one concurrent setup request can create the initial admins",
+				"Implementation gap: SetupDto does not reserve mustbe@api.email. Using it as the human email collides with the separate API-key user insert and is not a dedicated validation-400 path.",
+				"SetupDto applies @NotBlank/@Email to email and @NotBlank plus the strength regex to password: at least 8 characters, lower/uppercase, digit and one of @#$%^&+=!. Body/bean validation returns { message: 'invalid request' }. Frontend symbol regex is broader than backend, so client validation is not sufficient.",
+				"GlobalExceptionsHandler maps body validation/unreadable JSON (including unknown DTO fields) to 400 invalid request, database integrity violations to 409 resource already exists, and explicit custom exceptions to message objects. It does not normalize every framework/proxy error.",
+				"Implemented: @Transactional SetupService.handleSetup checks userRepository.count() > 0 and returns 409 when any user exists. Both initial users, human session and refresh token are inserted in that transaction. Planned hardening: serialize concurrent setup and align the POST eligibility check with GET countByRole(ADMIN); no in-process synchronization is implemented.",
 				"On the non-409 path, two users rows are inserted atomically: the human admin with the submitted email/password and a separate API-key user with email mustbe@api.email, a cryptographically random password stored only as a salted bcrypt hash, and role admin (ADMIN authority). One session row and one refresh_tokens row are created for the human admin only; the returned access token and cookies belong to that human admin. The generated API-key user password is not returned or logged. After that transaction commits, countByRole(ADMIN) is nonzero and the next GET /api/setup returns false",
-				"After a 201 response, the frontend stores the human admin access token in memory and navigates to /onboarding, using that token to fetch configuration keys and authenticate live telemetry reads. setupRequired is false after account creation because admins exist; telemetry detection does not gate setup completion or change the admin count. Authenticated admins can revisit /onboarding without a persisted onboarding-completion flag; reloading restores the session through the normal auth guard rather than repeating first-admin creation",
+				"After 201, AuthProvider fetches GET /api/users/me, stores the human access token/user in memory and the setup form navigates to /service-onboarding. That admin-only wizard fetches keys, verifies TLS and opens live reads only at its verification step. setupRequired becomes false because admins exist, not because telemetry arrives. No persisted onboarding-completion flag exists.",
 			],
 			security: [],
-			rateLimit: "10 req/min",
+			rateLimit: "JWT: 60/min per user + method + URI; anonymous: 60/min per IP + method + URI; login: 10/min per IP; ApiKey: shared 10/min per IP",
 			realtime: "None",
 			fallback: "None",
 			dedup: "None",
@@ -150,10 +152,10 @@ export const AUTH_ENDPOINTS =
 				body: "{ role: admin | viewer, access_token }",
 				cookies: [REFRESH_TOKEN_COOKIE, SESSION_HINT_COOKIE]
 			},
-			400: "{ message: '<validation message>' }",
-			401: "{ message: 'unauthorized' }",
-			429: "{ message: 'rate limited; retry in <seconds> seconds' }",
-			500: "{ message: 'server error' }",
+			400: "{ message: 'invalid request' }",
+			401: "{ message: '<authentication failure message>' }",
+			429: "{ message: 'rate limited. Try again in <seconds> seconds.' }",
+			500: "Unhandled server/framework failure; no catch-all message-envelope guarantee",
 		},
 		group: "Auth",
 		tables: ["users", "sessions", "refresh_tokens"],
@@ -166,10 +168,10 @@ export const AUTH_ENDPOINTS =
 			criteria: [
 			   SESSION_HINT_PURPOSE,
 			   "Frontend + backend validation",
-			   "400 returned if email is missing, not a string, or not a well-formed email address, or if password is missing or not a string. Email format is validated before the user lookup; invalid credentials return 401."
+			   "LoginDto validates nonblank email/password and email format before lookup. Body validation returns { message: 'invalid request' }; bad credentials return 401 { message: 'Invalid username or password' }. No setup-strength requirement is imposed on login passwords."
 			],
 			security: [],
-			rateLimit: "10 req/min",
+			rateLimit: "JWT: 60/min per user + method + URI; anonymous: 60/min per IP + method + URI; login: 10/min per IP; ApiKey: shared 10/min per IP",
 			realtime: "None",
 			fallback: "None",
 			dedup: "None",
@@ -196,11 +198,11 @@ export const AUTH_ENDPOINTS =
 			   cookies: [REFRESH_TOKEN_COOKIE, SESSION_HINT_COOKIE]
 			},
 			401: {
-			   body: "{ message: 'unauthorized' }",
+			   body: "{ message: '<authentication failure message>' }",
 			   clears: ["refresh_token", "session_hint"]
 			},
-			429: "{ message: 'rate limited; retry in <seconds> seconds' }",
-			500: "{ message: 'server error' }",
+			429: "{ message: 'rate limited. Try again in <seconds> seconds.' }",
+			500: "Unhandled server/framework failure; no catch-all message-envelope guarantee",
 		},
 		group: "Auth",
 		tables: ["sessions", "refresh_tokens"],
@@ -214,13 +216,14 @@ export const AUTH_ENDPOINTS =
 			[
 				SESSION_HINT_PURPOSE,
 				CLEAR_SESSION_COOKIES,
-				"Public at the filter level (permitAll), but the refresh cookie's signature and expiry are validated in the service layer — fails closed with 401 if invalid or missing. Missing or empty refresh cookies are rejected before any database query",
-				"On 200, rotate refresh_token and set session_hint=1 again with the new refresh cookie's expiry. On 401, clear both cookies, including when a token is expired, revoked, or reused. Network failures, 429, and 5xx do not clear the cookies or imply logout; show an error or retry state",
+				"Public at the security matcher level (permitAll). Refresh tokens are opaque 32-byte random values, not signed JWTs: the service hashes the supplied value with SHA-256, looks up token_hash and validates expiry, revocation and superseded state. Missing cookies fail before lookup; an empty string is hashed and looked up. Invalid credentials return 401 with { message: 'invalid Refresh Token' }.",
+				"On 200, rotate refresh_token and reset session_hint=1 with hardcoded 30-day cookie Max-Age. Service-level 401 clears both cookies; a filter-level 401 caused by a supplied header/query token never reaches that controller cleanup. Network failures, 429 and 5xx do not clear server cookies. Token database expiry is separately configured (currently also 30 days).",
 				"Reuse detection cannot clear cookies in other browsers: their hints may remain stale until their next refresh request returns 401 and clears both cookies",
 				"Stateful rotation: old refresh_tokens row marked superseded = true, new row inserted — both in one transaction",
-				"Reuse detection: if presented token's row already has superseded = true, every refresh_tokens row and every sessions row sharing that user_id are revoked immediately (not just the one session tied to the reused token) and 401 is returned — this is what makes 'forces full re-login on all devices' actually true, since a user may hold several concurrent sessions rows",
+				"Reuse detection runs before revoked/expiry checks in refresh, logout, list and revoke. A superseded token revokes all of that user's sessions and their refresh tokens; dontRollbackOn=UnauthorizedException retains those changes despite 401. Already issued access JWTs remain valid until expiry while their email subject exists: no session ID or revocation lookup is part of JWT validation.",
+				"Rotation has no explicit locking/version guard: concurrent use is not guaranteed single-winner. The frontend shared promise only deduplicates within one AuthProvider, not across tabs/devices. Each successful rotation starts a fresh configured 30-day token lifetime; no absolute session lifetime is enforced.",
 			],
-			rateLimit: "10 req/min",
+			rateLimit: "JWT: 60/min per user + method + URI; anonymous: 60/min per IP + method + URI; login: 10/min per IP; ApiKey: shared 10/min per IP",
 			realtime: "None",
 			fallback: "None",
 			dedup: "None",
@@ -244,11 +247,11 @@ export const AUTH_ENDPOINTS =
 		{
 			204: { body: null, clears: ["refresh_token", "session_hint"] },
 			401: {
-			   body: "{ message: 'unauthorized' }",
+			   body: "{ message: '<authentication failure message>' }",
 			   clears: ["refresh_token", "session_hint"]
 			},
-			429: "{ message: 'rate limited; retry in <seconds> seconds' }",
-			500: "{ message: 'server error' }",
+			429: "{ message: 'rate limited. Try again in <seconds> seconds.' }",
+			500: "Unhandled server/framework failure; no catch-all message-envelope guarantee",
 		},
 		group: "Auth",
 		tables: ["sessions", "refresh_tokens"],
@@ -257,14 +260,14 @@ export const AUTH_ENDPOINTS =
 			refresh_tokens: "Update (revoked)"
 		},
 		constraints: {
-			criteria: [],
+			criteria: ["Logout and session revocation do not invalidate already issued access JWTs. JWTs carry no session ID and validation does not check session revocation; they remain usable until expiry while the subject email exists."],
 			security:
 			[
-				"Sets revoked = true on the presented session's sessions row and the matching refresh_tokens row — server-side invalidation, not just cookie clearing",
+				"Sets revoked=true on the presented session and every refresh_tokens row for that session — server-side invalidation, not just cookie clearing",
 				CLEAR_SESSION_COOKIES,
-				"Clear both cookies on successful logout and on 401 for a missing or invalid session. The frontend discards its in-memory access token. On the next page load, no hint means skip the pointless refresh request and use GET /api/setup to choose /login or /setup. Network failures, 429, and 5xx do not confirm logout or clear the cookies",
+				"The server clears both cookies on successful logout and service-level 401, not on rate-limit or transport failures. Frontend behavior differs: AuthProvider.signOut always clears access token, user, query cache and session_hint in finally and navigates to /auth/login, even when logout fails. A surviving HttpOnly refresh cookie is not proof of completed server-side revocation.",
 			],
-			rateLimit: "10 req/min",
+			rateLimit: "JWT: 60/min per user + method + URI; anonymous: 60/min per IP + method + URI; login: 10/min per IP; ApiKey: shared 10/min per IP",
 			realtime: "None",
 			fallback: "None",
 			dedup: "None",
@@ -289,19 +292,20 @@ export const AUTH_ENDPOINTS =
 			200: {
 				body: "{ sessions: [{ id, user_agent, ip_address, last_used_at, current }] }"
 			},
-			401: "{ message: 'unauthorized' }",
-			500: "{ message: 'server error' }",
+			401: "{ message: '<authentication failure message>' }",
+			429: "{ message: 'rate limited. Try again in <seconds> seconds.' }",
+			500: "Unhandled server/framework failure; no catch-all message-envelope guarantee",
 		},
 		group: "Auth",
 		tables: ["sessions"],
 		tables_actions: { sessions: "Read" },
 		constraints: {
-			criteria: [],
+			criteria: ["SessionDto returns id, user_agent, ip_address, last_used_at and current. Lists non-revoked sessions without pagination or ordering; it does not additionally filter by refresh-token expiry. user_agent and ip_address are captured at login/setup; user_agent may be null because response DTO annotations are not invoked as request validation. last_used_at is explicitly updated on refresh, not every authenticated read."],
 			security:
 			[
-				"Service layer validates refresh cookie to identify the requesting user — the current session is flagged via current: true in the response so the UI can distinguish it",
+				"Service layer validates refresh cookie to identify the requesting user — the current session is flagged via current: true in the response so the UI can distinguish it. JWT/API-key identity is neither sufficient nor compared with the cookie owner; when both credentials are supplied, cookie identity governs session access and filter identity governs rate accounting. Superseded-cookie reuse can revoke all sessions even on this GET; list/revoke 401 does not clear cookies.",
 			],
-			rateLimit: "10 req/min",
+			rateLimit: "JWT: 60/min per user + method + URI; anonymous: 60/min per IP + method + URI; login: 10/min per IP; ApiKey: shared 10/min per IP",
 			realtime: "None",
 			fallback: "None",
 			dedup: "None",
@@ -336,11 +340,12 @@ export const AUTH_ENDPOINTS =
 					}
 				]
 			},
-			400: "{ message: '<validation message>' }",
-			401: "{ message: 'unauthorized' }",
+			400: "{ message: 'Invalid value for parameter: id' }",
+			401: "{ message: '<authentication failure message>' }",
 			403: "{ message: 'forbidden' }",
-			404: "{ message: 'not found' }",
-			500: "{ message: 'server error' }",
+			404: "{ message: 'session not found' }",
+			429: "{ message: 'rate limited. Try again in <seconds> seconds.' }",
+			500: "Unhandled server/framework failure; no catch-all message-envelope guarantee",
 		},
 		group: "Auth",
 		tables: ["sessions", "refresh_tokens"],
@@ -354,12 +359,12 @@ export const AUTH_ENDPOINTS =
 			],
 			security:
 			[
-				"Service layer validates refresh cookie — only the owning user can revoke their own sessions (403 if session.user_id !== requesting user)",
-				"Revokes the sessions row and all refresh_tokens rows sharing that session_id — if :id is the current session, clear refresh_token and session_hint and discard the frontend's in-memory access token (equivalent to logout). The next page load skips the pointless refresh request",
+				"Service layer validates refresh cookie — only the owning user can revoke their own sessions (403 if session.user_id !== requesting user). Unlike refresh/logout, list/revoke do not catch service 401 to clear cookies.",
+				"Revokes the session and all refresh tokens sharing session_id. For the current session the controller clears both cookies, but current useSessions only invalidates the list; immediate frontend access-token/user cleanup remains an implementation gap. The existing access JWT can still authenticate HTTP requests until expiry because AuthFilter does not consult session revocation.",
 				CLEAR_SESSION_COOKIES,
 				"Revoking another session leaves the caller's cookies unchanged. The server cannot clear cookies in the other browser: its hint may remain, but its next refresh request returns 401 and clears both cookies",
 			],
-			rateLimit: "10 req/min",
+			rateLimit: "JWT: 60/min per user + method + URI; anonymous: 60/min per IP + method + URI; login: 10/min per IP; ApiKey: shared 10/min per IP",
 			realtime: "None",
 			fallback: "None",
 			dedup: "None",

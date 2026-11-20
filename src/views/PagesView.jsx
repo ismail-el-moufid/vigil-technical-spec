@@ -116,10 +116,7 @@ export default function PagesView({ highlightPageId, highlightEndpointId })
 
 	return (
 		<div>
-			<div className="panel-title">Pages</div>
-			<div className="panel-sub">
-				{PAGES.length} routes in the application
-			</div>
+			<h1 className="screen-reader-only">Pages</h1>
 
 			<HotkeyScope>
 				{[...groups].map(([group, pages]) =>

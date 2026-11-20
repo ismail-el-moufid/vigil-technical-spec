@@ -1,49 +1,66 @@
 export const AI_ENDPOINTS =
 [
 	{
-		route: "/api/llm/analyze",
+		route: "/api/alerts/{id}/ask",
 		service: "Spring Boot + FastAPI + Ollama + ClickHouse",
 		owner: "AI Engineer",
 		method: "POST",
 		request: {
 			query: [],
-			body: [
-				{
-					name: "messages",
-					type: "[{ role: user | assistant, content: string }]",
-					required: true
-				}
-			]
+			body: [{ name: "question", type: "string (nonblank, max 500 characters before stripping; stripped before forwarding)", required: true }],
 		},
-		response:
-		{
-			chunk: "data: { token: '...' }",
-			done:  "data: { done: true }",
-			400: "{ message: '<single validation message>' }",
-			401: "{ message: 'unauthorized' }",
-			429: "{ message: 'rate limited; retry in <seconds> seconds' }",
-			500: "{ message: 'server error' }",
-			503: "{ message: 'Analysis unavailable' }",
+		response: {
+			token: "event: token; data: { token: '<text>' }",
+			done: "event: done; data: {}",
+			error: "event: error; data: { message: 'Analysis unavailable' } or { status: <upstream HTTP status>, message: '<upstream message>' }",
+			400: "{ message: 'invalid request' } | { message: 'Invalid value for parameter: id' }",
+			401: "{ message: '<authentication failure message>' }",
+			403: "{ message: 'access denied' }",
+			404: "{ message: 'No alert history with id: <id>' }",
+			429: "{ message: 'rate limited. Try again in <seconds> seconds.' }",
 		},
+		group: "AI",
+		tables: ["alert_history", "logs", "metrics", "traces"],
+		tables_actions: { alert_history: "Read", logs: "Read (alert service/window)", metrics: "Read (alert service/window)", traces: "Read (alert service/window)" },
+		constraints: {
+			criteria: [
+				"Implemented by AlertsController.llmAskController, AlertAskRequestDto and LlmService.askService. Authenticated admins and viewers can ask about any existing shared alert; ownership does not gate analysis.",
+				"Backend loads alert snapshots and telemetry context for [triggered_at - window_seconds, triggered_at], using the silence timeout when the rule window is null. It forwards rule, question and previous_analysis (up to 5000 characters) to FastAPI /internal/llm/ask with X-Vigil-User-Id from authentication. No client-supplied context or user ID is accepted.",
+				"No conversation history is accepted or maintained by the backend. Known frontend integration gap: alertAskApi.ts sends { question, history }, but the DTO only has question and Jackson rejects unknown properties; the current drawer request can fail with 400. Do not document history as a supported field.",
+				"SSE over an authenticated POST (frontend Axios fetch adapter), not native EventSource. Validation/missing-history failures occur before streaming; upstream/context/timeout failures after opening are error events, not a replacement HTTP 503 response. Successful completion emits done with an empty object, not { done: true }.",
+				"Follow-up answers are not saved to alert_history, broadcast over WebSocket, or delivered to webhooks. Automatic trigger summarization is the separate internal forward flow.",
+				"FastAPI contracts (app/schemas.py): both internal POST routes require alert_id (UUID), service (string) and triggered_at (datetime). rule is optional/null; omitted context defaults to empty logs/metrics/traces arrays. ForwardRequest ignores extra fields; AskRequest forbids extra top-level fields, strips strings, requires question (1-500 characters), and accepts optional/null previous_analysis (max 5000). Nested telemetry/rule models ignore extras; rule strings are not validated as Spring enums. Ask also requires X-Vigil-User-Id (1-64 characters), not a body user ID.",
+				"FastAPI app/main.py maps request/header validation to HTTP 400 { message: '<first validation error>' }, not the default 422. Both inference routes return HTTP 503 before streaming for unavailable inference or exhausted capacity; ask can return HTTP 429 before streaming. After the first token, handled inference failures emit error without done. Spring relays these upstream HTTP failures as public SSE error events with status, while stream/protocol failures use Analysis unavailable without status. LlmClient requires text/event-stream, a nonempty accumulated answer and a done event; EOF before done is failure.",
+				"Context is fetched without a row LIMIT from all three ClickHouse tables for the service and inclusive time window, before FastAPI reduces prompt content. Defaults in app/context.py/config.py: up to 20 logs ranked by severity/proximity then ordered chronologically (whitespace-normalized messages shortened to 160 characters), 10 traces ranked errors-first then longest duration, and 10 metrics selected nearest the trigger after keeping one row per metric name. Metric attributes/series IDs/units are not part of this selection identity; histogram values can be null and render as n/a. Empty context is allowed and produces a no-telemetry prompt, not a validation failure.",
+				"Automatic analysis: LlmService.analyze queues /internal/llm/forward only after the creating transaction commits (or immediately when no transaction is active). It uses rule details plus the same telemetry context, not conversation history. Any context/inference failure becomes Analysis unavailable. The service updates llm_analysis and version, reloads history, broadcasts a WebSocket llm event, then schedules webhooks; a missing/deleted history row stops delivery, and save/broadcast failures can prevent webhook scheduling. The in-memory executors are not a durable outbox.",
+				"Internal FastAPI routes are POST /internal/llm/forward and POST /internal/llm/ask; GET /health returns { status: 'ok' } and does not prove inference readiness. Neither inference route implements JWT/API-key/ingestion-key verification; X-Vigil-User-Id is an ask rate-limit identity, not authentication. Keep the service network-private. Default inference capacity is one shared concurrent stream with a 0.5s queue wait; overload returns HTTP 503 with llm busy; retry in <seconds> seconds.",
+			],
+			security: ["Telemetry, questions and previous analysis are sent to the configured internal LLM service/Ollama. Prompt row selection is not redaction; selected log messages may contain sensitive data. Do not include credentials in questions or examples; internal FastAPI has no authentication middleware."],
+			rateLimit: "Public JWT: 60/min per user + method + URI; ApiKey: shared 10/min per IP. FastAPI additionally limits ask to 5/min per X-Vigil-User-Id by default; upstream 429 is relayed as an SSE error with status=429.",
+			realtime: "Named token/done/error SSE events; client abort cancels the queued/running task.",
+			fallback: "Spring LLM timeout defaults to 30s; FastAPI inference timeout defaults to 25s. No done event on failure. A single Spring executor serializes automatic analysis and questions; queue wait is not bounded by the inference timeout, and the public SseEmitter has no timeout (0L).",
+			dedup: "None",
+		},
+		authStrategy: ["JWT", "API_KEY"],
+		requiredRole: "ADMIN_/_VIEWER",
+		id: "ep-alert-ask",
+	},
+	{
+		route: "/api/llm/analyze",
+		service: "Planned public conversation API — not implemented",
+		owner: "AI Engineer",
+		method: "POST",
+		request: { query: [], body: [{ name: "messages", type: "[{ role: user | assistant, content: string }] (planned)", required: true }] },
+		response: { planned: "No current controller or frontend route; no implemented response contract." },
 		group: "AI",
 		tables: [],
 		tables_actions: {},
 		constraints: {
-			criteria:
-			[
-				"Frontend sends full conversation history each turn. Server maintains no turn state.",
-				"Spring Boot proxies the chunked response from FastAPI directly to the client",
-				"This endpoint answers only from the conversation history in the request body — it does not query logs/metrics/traces itself. Telemetry-grounded analysis is a distinct internal flow triggered by alert evaluation, not by this endpoint: Spring Boot forwards { alert_id, service, triggered_at, context: { logs[], metrics[], traces[] } } to FastAPI, and that context field is what carries the actual telemetry rows into the LLM prompt. This endpoint's own request body (messages: [{ role, content }]) has no equivalent field, so it has no basis to read those tables",
-				"400 returned if messages is missing, empty, not an array, or contains an element with role outside user | assistant or a non-string/missing content — validated before the request reaches FastAPI, same 'checked before insert/forward' pattern used on every other enum-typed body field in this spec",
-				"503 above is the formal status code for the 30s LLM-timeout case described in fallback below — listed here explicitly so the response map doesn't silently disagree with the fallback text",
-			],
+			criteria: ["Planned only: the previous general conversation contract is retained for roadmap/reference compatibility. Current AI is the alert-scoped dashboard drawer using POST /api/alerts/{id}/ask. There is no /ai-insights page or public /api/llm/analyze controller."],
 			security: [],
-			rateLimit:
-				"10 req/min. Each POST = one request. Returns HTTP 429 on breach.",
-			realtime:
-				"Tokens delivered as HTTP chunked transfer encoding. Connection closes on completion.",
-			fallback:
-				"Returns HTTP 503 with { message: 'Analysis unavailable' } on LLM timeout (30s)",
+			rateLimit: "Not implemented",
+			realtime: "Not implemented",
+			fallback: "Not implemented",
 			dedup: "None",
 		},
 		authStrategy: ["JWT", "API_KEY"],

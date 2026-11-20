@@ -22,7 +22,7 @@ export default function CollapseToggle({
 {
 	return (
 		<span className={"collapse-toggle" + (className ? " " + className : "")}>
-			<span className="collapse-toggle-arrow">{collapsed ? "→" : "↓"}</span>
+			<span className="collapse-toggle-arrow" data-open={!collapsed} aria-hidden="true">→</span>
 			{hotkeyNumber != null && (
 				<kbd className="collapse-toggle-key" title={"Press " + MODIFIER_LABEL + hotkeyNumber + " to collapse"}>
 					{MODIFIER_LABEL}{hotkeyNumber}

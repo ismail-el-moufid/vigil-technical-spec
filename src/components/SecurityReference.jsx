@@ -150,21 +150,18 @@ export default function SecurityReference({ open, onToggle, activeStratId })
 			>
 				<span className="security-title">Security</span>
 				<span className="ep-route security-subtitle">Startup · Spring Security · Bucket4j</span>
-				<span className="security-expand-hint">{open ? "Collapse" : "Expand"}</span>
 				<CollapseToggle collapsed={!open} hotkeyNumber={hotkeyNumber} className="ep-toggle security-toggle" />
 			</div>
 			<div id="security-reference-content" className={collapsibleClass} inert={!open}>
 				<div className="collapsible-inner ep-body">
 					<div className="ep-meta-grid security-meta-grid">
-						<span className="meta-label">Startup</span>
-						<span className="meta-value meta-value--mono">
-							{STARTUP_SEQUENCE.map((n) => n.label).join(" → ")}
-						</span>
+						
 						<span className="meta-label">Filter Chain</span>
 						<span className="meta-value meta-value--mono">
 							{FILTER_CHAIN.map((n) => n.label).join(" → ")}
 						</span>
 					</div>
+					<details className="spec-notes"><summary>Startup sequence</summary>
 					<div className="startup-detail-list">
 						{STARTUP_SEQUENCE.map((n) => (
 							<div className="gw-row-item" key={n.tag}>
@@ -173,6 +170,8 @@ export default function SecurityReference({ open, onToggle, activeStratId })
 							</div>
 						))}
 					</div>
+
+					</details>
 
 					<div
 						className="ep-section-head used-by-head"

@@ -1,3 +1,7 @@
+import { ITEM_TOPICS } from "../data/architectureLinks";
+import { TOPICS } from "../data/architectureStory";
+import { navigateToRef } from "../utils/refNav";
+import Disclosure from "./ui/Disclosure";
 import { useMemo, useCallback } from "react";
 import { ENDPOINTS, PAGES, AUTH_STRATEGIES, ROLE_ENFORCEMENT_INFO } from "../data";
 import Badge from "./ui/Badge.jsx";
@@ -9,6 +13,16 @@ import { useCollapseHotkey } from "../hooks/useCollapseHotkey";
 import CollapseToggle from "./ui/CollapseToggle.jsx";
 import RefText from "./ui/RefText.jsx";
 import formatShape from "../utils/formatShape.js";
+
+function RelatedArchitecture({ itemId })
+{
+	const topics = ITEM_TOPICS.get(itemId);
+	if (!topics?.length) return null;
+	return <div className="related-architecture">
+		<span>Architecture</span>
+		{topics.map(topic => <button type="button" className="ref-pill" key={topic} onClick={() => navigateToRef("architecture/" + topic)}>{TOPICS[topic][0]}</button>)}
+	</div>;
+}
 
 const CONSTRAINT_CONFIG =
 [
@@ -80,7 +94,7 @@ function AccessRow({
 	// API_KEY is an operator/service credential (external API clients, etc.),
 	// never something the frontend itself sends — see AUTH_STRATEGIES.API_KEY's
 	// own notes in gateway.js. hideApiKey is only true when this card is
-	// nested in a page's "Endpoints used" list (see EndpointCard's showUsedBy)
+	// nested in a page's "Endpoints" list (see EndpointCard's showUsedBy)
 	// — that's the frontend-facing view of "what does this page call and how
 	// do I auth it", so API_KEY shouldn't appear there. The top-level
 	// Endpoints tab is full reference documentation for everyone (backend
@@ -187,6 +201,7 @@ function ConstraintSection({
 	showUsedBy = true,
 	isOpenState,
 	toggleOpenState,
+	openKey,
 	usedByKey,
 	openKeys,
 	collapseMatching
@@ -276,8 +291,7 @@ function ConstraintSection({
 				</div>
 			)}
 			{rows.length > 0 && (
-				<div>
-					<div className="ep-section-head">Constraints</div>
+				<Disclosure label="Constraints" count={rows.length} open={isOpenState(openKey + ":constraints")} onToggle={() => toggleOpenState(openKey + ":constraints")}>
 					{rows.map((r) => (
 						<div className="constraint-row" key={r.key}>
 							<span className={"constraint-tag constraint-tag--" + r.type}>
@@ -286,7 +300,7 @@ function ConstraintSection({
 							<span className="constraint-text"><RefText value={r.text} /></span>
 						</div>
 					))}
-				</div>
+				</Disclosure>
 			)}
 		</div>
 	);
@@ -467,7 +481,7 @@ function EndpointCard({
 {
 	const expanded = isOpenState(openKey);
 	// showUsedBy is false exactly when this card is nested inside a
-	// PageCard's "Endpoints used" list (see PageCard below) rather than
+	// PageCard's "Endpoints" list (see PageCard below) rather than
 	// shown at the top level of the Endpoints view — and that list item
 	// shouldn't draw its own top/bottom border on top of the page card's.
 	// It also gates the stack/team meta-line and the Tables row: that
@@ -541,6 +555,7 @@ function EndpointCard({
 							</span>
 						</div>
 					)}
+					{expanded && <RelatedArchitecture itemId={ep.id} />}
 					<div className="ep-meta-grid">
 						{showUsedBy && (
 							<TablesRow ep={ep} openKey={openKey} isOpenState={isOpenState} toggleOpenState={toggleOpenState} collapseMatching={collapseMatching} />
@@ -606,6 +621,7 @@ function EndpointCard({
 						showUsedBy={showUsedBy}
 						isOpenState={isOpenState}
 						toggleOpenState={toggleOpenState}
+						openKey={openKey}
 						usedByKey={openKey + ":usedby"}
 						openKeys={openKeys}
 						collapseMatching={collapseMatching}
@@ -683,27 +699,27 @@ function PageCard({
 						))}
 					</div>
 					<p className="page-desc">{page.desc}</p>
+					{isOpen && <RelatedArchitecture itemId={page.id} />}
 					{page.requirements?.length > 0 && (
-						<div>
-							<div className="ep-section-head">Page requirements</div>
+						<Disclosure label="Requirements" count={page.requirements.length} open={isOpenState(keyPrefix + ":requirements")} onToggle={() => toggleOpenState(keyPrefix + ":requirements")}>
 							{page.requirements.map((requirement) => (
 								<div className="gw-row-item" key={requirement}>
 									<span className="gw-row-dot">·</span>
 									<span className="constraint-text">{requirement}</span>
 								</div>
 							))}
-						</div>
+						</Disclosure>
 					)}
 					{eps.length === 0 ? (
 						<div className="static-page-msg">
 							{excludeEpId
 								? "No other endpoints used."
-								: "Static page - no API endpoints."}
+								: "Static page"}
 						</div>
 					) : (
 						<div>
 							<div className="ep-section-head">
-								{excludeEpId ? "Other endpoints used" : "Endpoints used"}
+								{excludeEpId ? "Other endpoints" : "Endpoints"}
 								<button
 									type="button"
 									className="group-hd-collapse-btn ep-section-collapse-btn"

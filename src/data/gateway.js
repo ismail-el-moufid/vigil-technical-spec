@@ -1,277 +1,93 @@
-// ─── AUTHENTICATION STRATEGIES ───────────────────────────────────────────
-// Reusable auth patterns
-
+// Existing strategy IDs remain stable for endpoint/schema references.
 export const AUTH_STRATEGIES =
 {
 	PERMIT_ALL: {
-		id: "gw-strat-permit-all",
-		tag: "PERMIT ALL",
-		tagType: "permit",
-		label: "No auth: SecurityConfig.permitAll()",
-		items:
-		[
-		],
+		id: "gw-strat-permit-all", tag: "PERMIT ALL", tagType: "permit", label: "No access-token requirement: SecurityConfig.permitAll()",
+		items: ["Setup/login are public; refresh/logout/session management authenticate the refresh cookie in AuthService. permitAll does not bypass filters: a supplied invalid Authorization header can still be rejected by JjwtAuthFilter."],
 	},
 	JWT: {
-		id: "gw-strat-jwt",
-		tag: "JWT",
-		tagType: "sec",
-		label: "Authorization: Bearer <access_token>",
-		items:
-		[
-			"15-minute TTL — short-lived; frontend holds it in memory only — never written to a cookie or localStorage, so it can't be read by an XSS payload",
-			"Reuse an unexpired access token without checking session_hint. Whenever the access token is missing (including after a hard reload) or expired, check the hint: session_hint=1 means call POST /api/auth/refresh; no hint means skip refresh and use GET /api/setup to choose /login or /setup. This saves an unnecessary refresh request when logged out, not a request or database work when restoring a valid session. Accepted tradeoff: if the hint is independently deleted while the refresh cookie remains valid, the frontend skips session recovery and shows /login when setup is complete",
-			"session_hint is a JavaScript-readable cookie (value 1, Secure, SameSite=Strict, Path=/, Max-Age=30d), set and renewed alongside the HttpOnly refresh_token. It can be stale or edited and is never proof of login. A refresh 401 clears both cookies and sends the frontend through GET /api/setup; network failures, 429, and 5xx remain error/retry states without clearing cookies",
-			"AuthFilter validates JWT signature and expiry, then loads the current users row by token subject on every authenticated HTTP request. Missing/deleted user returns 401; SecurityContext identity and authorities come from the current database user/role, not stale JWT claims",
-			"Onboarding live reads use the in-memory access token as the URL-encoded token query parameter on all three EventSource connections, never the ingestion_key or returned api_key. At access-token expiry, close those streams and coordinate a single in-flight session refresh shared across subscribers, using the same session_hint rules; reopen only the active monitoring session with the new token. Refresh 401 follows normal setup/login routing; network failures, 429 and 5xx remain retry states. Native EventSource errors expose no HTTP status/body, so do not infer 401 or independently refresh for each stream error; use the known token expiry and explicit refresh results, with backoff for other connection failures",
-			"If an API call returns 401 because the access token expired, the frontend applies the same hint check before attempting refresh. With session_hint=1, POST /api/auth/refresh validates the refresh_token cookie against the refresh_tokens table, rotates the row, reissues a new access token and refresh cookie, and renews session_hint with the refresh cookie's expiry. Without the hint, skip refresh and use GET /api/setup to choose /login or /setup",
-			"Role changes take effect on the next authenticated request across all routes. ADMIN-tier authorization uses the current database role and returns 403 after demotion; ADMIN_/_VIEWER routes also require an existing database user",
-			{
-				text: "Account deletion cascades sessions/refresh_tokens and causes immediate 401 on the next authenticated HTTP request: an unexpired JWT is insufficient when its subject no longer exists in users",
-				refs: ["ep-users-delete"],
-			},
-			"Signing key: HMAC secret sourced from a Spring Boot @ConfigurationProperties bean (vigil.jwt-secret) — auto-generated as a random secret at startup via @PostConstruct and held in memory only if the property is left unset. This in-memory default is a dev-mode convenience, not the production design: a restart or a multi-instance deployment where vigil.jwt-secret isn't set identically everywhere invalidates every outstanding access token silently (the instance that issued it and the instance validating it disagree on the secret). Accepted for this project's scope; production deployment requires vigil.jwt-secret to be set explicitly and identically across instances",
+		id: "gw-strat-jwt", tag: "JWT", tagType: "sec", label: "Authorization: Bearer <access_token>",
+		items: [
+			"Access tokens have a configured 15-minute lifetime and are held only in frontend memory, not cookies/localStorage. In-memory storage limits persistence but does not make tokens inaccessible to an active XSS payload.",
+			"On initial load AuthProvider refreshes only if session_hint is present, then calls GET /api/users/me. No hint skips recovery. ProtectedRoute sends unauthenticated visitors to /auth/login; AuthEntryGuard queries GET /api/setup to choose /auth/login or /auth/setup. Temporary bootstrap failures show an error state.",
+			"session_hint=1 is JavaScript-readable, Secure, SameSite=Strict, Path=/, Max-Age=30d; refresh_token is HttpOnly at /api/auth with the same attributes/expiry. The hint is not proof of authentication. Refresh 401 clears both server cookies. In-session apiFetch retries a 401 through a shared refresh promise without checking the hint or proactively checking JWT expiry; no timer-based refresh is implemented.",
+			"JjwtAuthFilter verifies signature/expiry and resolves the current database user by email from the JWT subject on every authenticated HTTP request. Missing/deleted user returns 401 and roles come from the current database row. Tokens are email-subject, not immutable user-ID tokens: changing email invalidates the old subject until refresh; recreating the same email is a security-review gap.",
+			"Native EventSource supplies ?token=<JWT>; header-capable HTTP clients may use Bearer JWT or ApiKey. JjwtAuthFilter accepts the JWT query parameter on any route/method when Authorization is absent, not only live routes. API keys are not supported as query tokens. Header scheme prefixes are case-sensitive (Bearer / ApiKey plus one space); any supplied header takes precedence, even if invalid. Query credentials can leak through request logs/history; do not use real tokens in examples.",
+			"Live streams and WebSockets are authenticated at opening, not on every push. The frontend reopens when its token changes, but no scheduled token-expiry refresh/reconnect coordinator is currently implemented. Existing connections are not closed automatically when a user is deleted or demoted; REST requests and WS client actions reload current users separately.",
+			{ text: "Account deletion rejects the old subject on the next authenticated HTTP request while that email is absent. User role changes apply on the next request; ownership restrictions remain service-level checks.", refs: ["ep-users-delete"] },
+			"HMAC signing secret comes from VigilProperties; if unset it generates 64 random bytes at startup and keeps the encoded secret in memory. Restart/multiple instances require an explicitly stable shared secret to preserve outstanding access tokens. Never embed that secret in spec data.",
 		],
 	},
 	API_KEY: {
-		id: "gw-strat-api-key",
-		tag: "API KEY",
-		tagType: "rate",
-		label: "Authorization: ApiKey <key>",
-		items:
-		[
-			"Program-level lifetime",
-			"vigil.api-key: sourced from the same @ConfigurationProperties bean, auto-generated as a UUID via @PostConstruct at startup and held in memory only if left unset — this auto-generated, in-memory-only behavior is the intended design as-is, not a dev-mode default awaiting a production override. Accepted tradeoff of that design: a restart silently rotates it, breaking any external API client holding the old value with no warning, and a multi-instance deployment mints a different key per instance since nothing pins it identically everywhere",
-			"Bound to a persisted users row with email mustbe@api.email and role admin (ADMIN authority), created with a cryptographically random password in the same transaction as the first human admin during POST /api/setup. Store only the salted bcrypt password hash; never return or log the generated password. Valid API-key authentication resolves this user as the SecurityContext principal, including its user ID for shared history ownership and per-user notification operations. Role checks use this user's role rather than a roleless ADMIN bypass. Before setup creates the user, API-key authentication cannot succeed. The user is not recreated on restart; startup key generation/rotation remains unchanged",
+		id: "gw-strat-api-key", tag: "API KEY", tagType: "rate", label: "Authorization: ApiKey <key>",
+		items: [
+			"Persistent file-backed credential, loaded once at process startup; not an auto-rotating UUID.",
+			"VigilProperties uses ApiKeyFile.loadOrCreate(vigil.api-key-file), default /var/lib/vigil/admin/api-key. Existing valid files are reused; only a missing file generates a 32-byte random base64url key. The dedicated directory is owner-only 0700 and the regular credential file 0600, with locking and symlink-safe/atomic publication. Invalid/inaccessible files fail startup. Retain the credential volume across restarts; the bean exposes no apiKey setter for an inline vigil.api-key override.",
+			"API-key authentication uses constant-time comparison and resolves mustbe@api.email as the persisted principal. Setup creates that user with role admin and a random bcrypt-hashed password in the same transaction as the human admin; the generated password is not returned. No backing user means API-key auth fails. Deleting/renaming/demoting that row affects API access; it is not a roleless administrator bypass.",
+			"Credential-file changes are not hot-reloaded by JjwtAuthFilter: the active bean value remains the loaded value until restart. FtTranscendenceApplication dispatches admin reset-password <email>, admin delete-all-accounts and admin restore-api-user before Spring starts. These are local CLI operations, not missing HTTP routes: reset/delete use API-key HTTP calls; recovery can repair the backing account through PostgreSQL with operator confirmation. Delete-all preserves the API account, commits deletions separately and does not reopen setup because that admin remains.",
 		],
 	},
 	INTERNAL_ONLY: {
-		id: "gw-strat-internal-only",
-		tag: "INTERNAL",
-		tagType: "dedup",
-		label: "Internal port only",
-		items:
-		[
-			"Bound to an internal port on private container networks on one trusted host; the port is not published to the host or public network",
-			"Called exclusively by trusted internal services; this same-host topology uses network isolation without additional internal credentials or TLS. Cross-host or untrusted-network deployments require TLS and authenticated service access before deployment",
+		id: "gw-strat-internal-only", tag: "INTERNAL", tagType: "dedup", label: "Private internal services / callback connector",
+		items: [
+			"Spring adds connector 8081 for the ingest callback, whose controller checks localPort and returns 404 on other ports. This is the same servlet application/filter chain, not a separate filter-free server. Only the POST callback is explicitly permitAll and rate-limit-exempt.",
+			"FastAPI /internal/llm/forward and /internal/llm/ask live on the separate LLM service, not the Spring 8081 connector. They have no application credential in the current code and rely on private networking; ask additionally requires X-Vigil-User-Id supplied by Spring.",
+			"Deployment must isolate internal ports and enforce trusted-host networking. Cross-host/untrusted networks require authenticated service access and TLS. An extra Tomcat connector alone does not restrict every public controller from being reachable on that connector.",
 		],
 	},
 	WS_AUTH_HANDSHAKE: {
-		id: "gw-strat-ws-auth-handshake",
-		tag: "WS AUTH",
-		tagType: "sec",
-		label: "WebSocket, JWT validated at handshake via HandshakeInterceptor",
-		items:
-		[
-			{
-				text: "Validates JWT signature/expiry and resolves the current database user/role at the HTTP Upgrade, just like AuthFilter; missing/deleted users receive 401 and authorization uses current database authorities, not signed role claims",
-				refs: ["gw-strat-jwt"],
-			},
-			"Token passed as ?token= on the upgrade request — same tradeoff as SSE (native WebSocket clients can't set an Authorization header either); accepted for this project",
-			"Connection rejected during the HTTP Upgrade if the token is invalid or missing — an unauthenticated client never completes the handshake, so there's no post-connect auth window or frame protocol",
-			"On token expiry, client reconnects with a fresh token; no mid-session re-auth frames",
+		id: "gw-strat-ws-auth-handshake", tag: "WS AUTH", tagType: "sec", label: "WebSocket JWT validated by MyHandShake",
+		items: [
+			{ text: "?token=<JWT> is required by MyHandShake, which verifies signature/expiry and loads the current database user by email. It stores userId/email/role and a frame bucket in connection attributes; API-key query tokens are unsupported.", refs: ["gw-strat-jwt"] },
+			"Invalid/missing query credentials reject the upgrade with 401; MyHandShake sets the status without writing a JSON error body. Earlier filter rejection can instead return a JSON 401. A valid Authorization header alone is insufficient: the handshake still requires a valid token query. WebSocketConfiguration restricts browser origins to vigil.front-end-url; this is not a general HTTP CORS policy. There is no post-connect auth window or re-auth frame protocol.",
+			"Each ack/notif action reloads the user and runs the REST service method. Established push connections have no server-side JWT-expiry timer or deleted-user eviction. Frontend WS reconnect/refetch is implemented, but proactive token refresh on expiry is not.",
 		],
 	},
 };
 
-// ─── GATEWAY INFRASTRUCTURE ───────────────────────────────────────────────────
-// Infra layer documentation (startup sequence + gateway filter chain) —
-// rendered by the INFRA card, not a security-specific section.
-//
-// Scope: this chain governs the PUBLIC port only. /internal/* routes are
-// bound to a separate, network-isolated port on the same Spring Boot
-// deployable and do not pass through
-// CorsFilter, RateLimitFilter, or AuthFilter at all — isolation there is
-// enforced at the network/port level, not by this chain.
-
-// ─── STARTUP SEQUENCE ─────────────────────────────────────────────────────
-// Boot-time order, runs once when the Spring Boot process starts — not
-// triggered by any request, so this belongs here (infrastructure-wide)
-// rather than folded into any single endpoint's fields. vigil.api-key must
-// be generated before the filter chain assembles: AuthFilter checks
-// incoming ApiKey headers against it from the moment the public port is
-// reachable, so generating it first closes what would otherwise be a
-// startup window where the port is open but AuthFilter has no value to
-// check requests against. vigil.ingestion-key's own ordering concern is
-// different and doesn't involve this process's ports at all — it's checked
-// by the collector, an external process this API doesn't control the
-// startup of, against services pushing it telemetry; the value reaches the
-// collector by being written to a file on a volume mounted into both
-// processes, which the collector's own bearertokenauth extension reads
-// directly — not a manual hand-off, and not something this sequence
-// enforces itself since it happens outside this process's ports. It still
-// needs to exist before that file can be written, which is why key
-// generation for both is grouped into one step below rather than split.
-// Setup state is not cached at startup: GET /api/setup queries PostgreSQL
-// on every request and computes setup_required as countByRole(ADMIN) == 0.
-// POST /api/setup re-checks the same database condition inside its transaction.
-//
-// vigil.jwt-secret (the same HMAC secret the JWT strategy signs access
-// tokens with) is generated by the same @PostConstruct mechanism but isn't
-// pictured below: JWT validation only applies to an already-logged-in caller,
-// so it isn't a startup-ordering concern the way vigil.api-key is — nothing
-// reachable at boot depends on it yet.
 export const STARTUP_SEQUENCE =
 [
-	{
-		tag: "KEYS",
-		tagType: "rate",
-		label: "Generate vigil.api-key + vigil.ingestion-key",
-		sub: "Whichever key is unset on the config bean gets generated via UUID.randomUUID(). vigil.api-key stays in memory only; vigil.ingestion-key is also written to a shared file for the collector to read. Live values are fetched via a GET request.",
-	},
-	{
-		tag: "CHAIN",
-		tagType: "dedup",
-		label: "Assemble filter chain",
-		sub: "CorsFilter, RateLimitFilter (Bucket4j), and AuthFilter are wired in — AuthFilter checks incoming ApiKey headers against vigil.api-key, so it can only exist once that key is generated.",
-	},
-	{
-		tag: "LISTEN",
-		tagType: "crit",
-		label: "Open public + internal ports",
-		sub: "Public port opens after CHAIN, so AuthFilter is already enforcing vigil.api-key from the first request. Internal port opens at the same time, gated by network isolation rather than a key. vigil.ingestion-key's shared file is already written by this point, so the collector's own auth extension can start validating service pushes as soon as it comes up.",
-	},
+	{ tag: "KEYS", tagType: "rate", label: "Load API credential; initialize JWT and ingestion settings", sub: "VigilProperties loads/creates the persistent API-key file, generates a JWT secret if unset and an in-memory ingestion UUID if unset. Compose supplies JWT/ingestion secrets through Vault-rendered API configtree files; its Collector uses a rendered config with a bearer-token key filename. Vault init seeds matching ingestion keys; standalone generated fallback is not shared." },
+	{ tag: "CHAIN", tagType: "dedup", label: "Assemble Spring Security chain", sub: "JjwtAuthFilter resolves identity before RateLimiter; method-level authorization follows. permitAll routes still pass through filters." },
+	{ tag: "LISTEN", tagType: "crit", label: "Open public connector + callback connector 8081", sub: "Both use the same servlet application. Callback controller additionally checks localPort. Setup GET queries admin count per request; setup POST currently checks total user count and is not serialized." },
 ];
 
 export const FILTER_CHAIN =
 [
-	{
-		tag: "IN",
-		tagType: "dedup",
-		label: "CLIENT",
-		sub: "inbound HTTP",
-		muted: true,
-	},
-	{
-		tag: "CORS",
-		tagType: "dedup",
-		label: "CorsFilter",
-		sub: "Spring · preflight OPTIONS",
-		muted: true,
-	},
-	{
-		tag: "RL",
-		tagType: "rate",
-		label: "RateLimitFilter",
-		sub: "Bucket4j · 10 req/min per IP · 429 on breach",
-	},
-	{
-		tag: "AUTH",
-		tagType: "sec",
-		label: "AuthFilter",
-		sub: "Spring Security · JWT or ApiKey → SecurityContext",
-	},
-	{
-		tag: "CTRL",
-		tagType: "crit",
-		label: "Controller",
-		sub: "identity already resolved",
-		muted: true,
-	},
+	{ tag: "IN", tagType: "dedup", label: "CLIENT", sub: "inbound HTTP", muted: true },
+	{ tag: "AUTH", tagType: "sec", label: "JjwtAuthFilter", sub: "Bearer JWT / ApiKey header, or JWT token query → current database identity" },
+	{ tag: "RL", tagType: "rate", label: "RateLimiter", sub: "After authentication · identity/method/URI buckets or shared API-key IP budget" },
+	{ tag: "CTRL", tagType: "crit", label: "Controller / service", sub: "@PreAuthorize and ownership / cookie checks", muted: true },
 ];
 
 export const RATE_LIMITING_INFO =
 [
 	{
-		tag: "DEFAULT",
-		tagType: "rate",
-		label:
-			"10 req/min per IP · token-bucket · applies to all routes unless noted below",
-		items:
-		[
-			"Capacity: 10 tokens. Refill: +10 every 60 s.",
-			"Keyed by client IP — shared bucket across all endpoints for that IP, not one bucket per route",
-			"429 Too Many Requests on exhaustion, with JSON { message: 'rate limited; retry in <seconds> seconds' }. Replace <seconds> with the positive whole-second wait until the bucket permits another request, rounding up. Do not send a Retry-After header or a separate retry field. Over-limit WebSocket ack/notif frames use the same combined text in message and keep the connection open",
-			"Rate check runs before auth — an exhausted IP never reaches AuthFilter",
-			"All custom HTTP exceptions, including validation, authentication and authorization failures, use exactly { message: '<message>' }. Validation returns one message, not a field map; never return raw strings, error/code fields or context envelopes. This also applies to rejected SSE/WS opening HTTP requests before the stream is established",
-			"Bucket counts requests, not rows: GET ?format=csv on the telemetry endpoints (metrics/traces/logs) ignores pagination and returns the full matching dataset as one unpaginated text/csv response, but still consumes exactly one token, same as a normal small page — this is what makes CSV export viable without a separate rate-limit carve-out",
-			"Known simplification: a single page load can consume several tokens at once (e.g. Overview: 3 REST GETs + 3 SSE upgrades = 6 of 10), and the bucket is shared per-IP, so multiple users behind the same NAT/proxy draw from the same 10. Acceptable for project scope; a production system would key per-user and/or size buckets per-route.",
+		tag: "DEFAULT", tagType: "rate", label: "60 requests/min per identity + method + exact URI (except login/API key)",
+		items: [
+			"Implemented by RateLimiter after JjwtAuthFilter. JWT uses user:<database id>; unauthenticated requests use ip:<remoteAddr>. The key includes HTTP method and request URI (not query), so different resource IDs have independent buckets. Capacity 60, interval refill 60 every 60s. Cookie-only requests use IP identity; frontend session settings use apiFetch with a JWT header as well as the refresh cookie and therefore use user identity when that JWT is valid.",
+			"Login uses 10/min keyed by IP + method + URI. ApiKey requests instead share one 10/min IP bucket across all methods/routes, including administration commands. The filter reads request.getRemoteAddr(), not forwarded headers directly. Compose enables SERVER_FORWARD_HEADERS_STRATEGY=native, so trusted-proxy processing can rewrite that address from X-Forwarded-For. Keep API connectors unpublished and restrict trusted proxy access; direct/untrusted access can undermine IP accounting.",
+			"HTTP exhaustion returns { message: 'rate limited. Try again in <seconds> seconds.' }. Registry floors Duration.toSeconds(), so the number may be zero; no Retry-After header is set. FastAPI ask has a different message format and separate 5/min per-user default limit.",
+			"JSON/CSV requests each consume one token regardless of row count. SSE and WS opening GETs consume one token; established server pushes do not. The earlier shared 10/min budget for every browser endpoint is not the current implementation. Buckets are process-local ConcurrentHashMap entries with no eviction or shared cluster store; restart resets budgets, instances enforce independently, and exact-URI cardinality can grow memory use. Invalid header/query credentials rejected by JjwtAuthFilter never reach this limiter.",
+			"GlobalExceptionsHandler custom errors use a message object, but exact text is source-specific: access denied, Invalid username or password, invalid Refresh Token, etc. There is no catch-all guaranteeing every framework error has that envelope. Callback runtime failure and handshake rejection explicitly have empty bodies; streaming errors are protocol events.",
 		],
 	},
 	{
-		tag: "EXEMPT",
-		tagType: "crit",
-		label: "Routes excluded from rate limiting",
-		items:
-		[
-			"/internal/alerts/trigger-evaluation — internal port, network-isolated; no HTTP rate limiting applies",
-			"The internal LLM-forwarding route — same internal port, same network isolation; no HTTP rate limiting applies",
-		],
+		tag: "EXEMPT", tagType: "crit", label: "Callback exemption and separate LLM limits",
+		items: ["POST /internal/alerts/trigger-evaluation skips the Spring limiter. The filter also retains a legacy /internal/ingest prefix exemption, but no such controller exists.", "FastAPI internal LLM routes do not traverse Spring filters; ask has its own per-user fixed window and both inference routes share a concurrency limiter."],
 	},
 	{
-		tag: "SSE / WS",
-		tagType: "realtime",
-		label: "Rate limiting on the initial upgrade GET only",
-		items:
-		[
-			"The HTTP GET opening the stream consumes one token at connection time",
-			"Server-push frames over the established stream are not rate-limited",
-			"The alerts WebSocket upgrade — single long-lived connection per client; the upgrade GET counts once against the DEFAULT bucket, subsequent frames do not",
-		],
+		tag: "SSE / WS", tagType: "realtime", label: "Opening HTTP budget plus independent WS frame bucket",
+		items: ["WS MyHandShake creates a per-connection capacity-10 bucket refilled every 60s. AlertSocketHandler consumes a token for every incoming text frame, including malformed/unknown actions.", "Exhausted frames get { type: 'error', message: 'rate limited. Try again in <seconds> seconds.' }; connection remains open. This is independent of the opening HTTP request bucket."],
 	},
 ];
 
 export const ROLE_ENFORCEMENT_INFO =
 {
-	note: {
-		text: 'The filter resolves identity only — it answers "who is this?". Role checks (@PreAuthorize or explicit) live in the controller or service layer, not the filter. The roles below apply to JWT and API-key callers alike; API_KEY resolves the default mustbe@api.email user, created with role admin during first-admin setup, and uses that user’s role for authorization.',
-		refs: ["gw-strat-api-key"],
-	},
-	roles:
-	[
-		{
-			tag: "ADMIN",
-			tagType: "sec",
-			label: "hasRole('ADMIN') required",
-			items:
-			[
-				"GET /api/config/keys · POST /api/users · GET /api/users",
-				"PATCH /api/users/{id} · DELETE /api/users/{id} (both 409 if the action would leave zero admins)",
-				"GET + POST + DELETE /api/webhooks",
-				{
-					text: "POST /api/alerts/rules · PATCH /api/alerts/rules/{id} · DELETE /api/alerts/rules/{id}",
-					refs: [
-					   "ep-alert-rules-create",
-					   "ep-alert-rules-update",
-					   "ep-alert-rules-delete"
-					],
-				},
-			],
-		},
-		{
-			tag: "ADMIN / VIEWER",
-			tagType: "crit",
-			label: "Any authenticated caller — JWT or API key, any role",
-			items:
-			[
-				"All telemetry reads · GET + PATCH /api/users/me",
-				"POST /api/llm/analyze · all SSE streams",
-				{
-					text: "GET /api/alerts · GET /api/alerts/rules · PATCH /api/alerts/history/{id} (owner-only when owned) · GET /api/alerts/notifications · PUT /api/alerts/notifications/{historyId} (caller only)",
-					refs: [
-					   "ep-alerts-list",
-					   "ep-alert-rules-list",
-					   "ep-alert-history-update",
-					   "ep-alert-notifications-list",
-					   "ep-alert-notification-update"
-					],
-				},
-				{
-					text: "WS alerts stream — a WebSocket, not an SSE stream; grouped here rather than under \"all SSE streams\" above since it isn't one",
-					refs: ["ep-alerts-ws"],
-				},
-			],
-		},
-		{
-			tag: "NO AUTH",
-			tagType: "permit",
-			label: "No authentication required — permitAll()",
-			items:
-			[
-				"GET /api/setup · POST /api/setup · POST /api/auth/login",
-				"POST /api/auth/refresh · POST /api/auth/logout",
-				"GET /api/auth/sessions · DELETE /api/auth/sessions/{id}",
-			],
-		},
+	note: { text: "JjwtAuthFilter resolves current identity/authorities; @PreAuthorize and service ownership checks enforce permissions. JWT and API-key requests use the same role checks. Cookie-authenticated auth routes validate in AuthService instead. SecurityConfig disables CSRF, uses STATELESS servlet sessions and does not configure HTTP CORS. SameSite=Strict cookies and same-origin deployment are relevant controls, not a CSRF-token mechanism. permitAll path matchers for setup/auth/WS are not method-scoped; controller mappings still determine supported methods.", refs: ["gw-strat-api-key"] },
+	roles: [
+		{ tag: "ADMIN", tagType: "sec", label: "hasRole('admin')", items: ["GET /api/config/keys · POST /api/config/tls/addresses · GET /api/config/tls/ca", "GET/POST /api/users · PATCH/DELETE /api/users/{id} (last-admin guards)", "GET/POST /api/webhooks · DELETE /api/webhooks/{id}", "POST /api/alerts/rules · PATCH/DELETE /api/alerts/rules/{id}"] },
+		{ tag: "ADMIN / VIEWER", tagType: "crit", label: "hasAnyRole('admin', 'viewer')", items: ["All raw/series/attributes telemetry reads and live SSE", "GET/PATCH /api/users/me", "GET /api/alerts · GET /api/alerts/rules · PATCH /api/alerts/history/{id} (owned changes restricted) · GET/PUT notifications (caller only)", "POST /api/alerts/{id}/ask · JWT alerts WS handshake. No public /api/llm/analyze controller."] },
+		{ tag: "NO AUTH", tagType: "permit", label: "permitAll matchers (not filter bypass)", items: ["GET/POST /api/setup · POST /api/auth/login", "POST /api/auth/refresh · POST /api/auth/logout · GET /api/auth/sessions · DELETE /api/auth/sessions/{id} (refresh cookie required)", "/api/alerts/ws (handshake interceptor validates token) · POST /internal/alerts/trigger-evaluation (local-port check)"] },
 	],
 };

@@ -8,6 +8,9 @@
 		"build": "vite build",
 		"lint": "eslint .",
 		"test": "node --test scripts/spec-contract.test.mjs",
+				"test:atlas": "node --test scripts/system-atlas.test.mjs",
+		"test:diagrams": "node --test scripts/auth-flow.test.mjs scripts/architecture-diagrams.test.mjs scripts/architecture-story.test.mjs scripts/flow-diagram.test.mjs scripts/system-atlas.test.mjs",
+		"test:sources": "node --test scripts/source-links.test.mjs scripts/source-links-client.test.mjs",
 		"preview": "vite preview"
 	},
 	"dependencies": {

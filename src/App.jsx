@@ -5,7 +5,6 @@ import { isPhone } from "./utils/device.js";
 import EndpointsView from "./views/EndpointsView.jsx";
 import PagesView from "./views/PagesView.jsx";
 import ArchitectureView from "./views/ArchitectureView.jsx";
-import { ARCHITECTURE_SECTIONS } from "./data/architecture.js";
 import CommandPalette from "./components/CommandPalette.jsx";
 import SecurityReference from "./components/SecurityReference.jsx";
 import { setRefNavHandler } from "./utils/refNav.js";
@@ -13,15 +12,16 @@ import { setRefNavHandler } from "./utils/refNav.js";
 const TABS = ["endpoints", "pages", "architecture"];
 const isMac = /mac/i.test(navigator.platform);
 
-export default function App()
+export default function App({ initialTab = "endpoints" } = {})
 {
-	const [tab, setTab] = useState("endpoints");
+	const [tab, setTab] = useState(initialTab);
 	const [prevTab, setPrevTab] = useState(null);
 	const [animKey, setAnimKey] = useState(0);
 	const [paletteOpen, setPaletteOpen] = useState(false);
 	const [activeEpId, setActiveEpId] = useState(null);
 	const [activePageId, setActivePageId] = useState(null);
 	const [activeSectionId, setActiveSectionId] = useState(null);
+	const [chapter, setChapter] = useState(0);
 	const [secOpen, setSecOpen] = useState(false);
 	const [activeStratId, setActiveStratId] = useState(null);
 
@@ -139,6 +139,8 @@ export default function App()
 	{
 		if (t === tab) return;
 		setPrevTab(tab);
+		setActiveSectionId(null);
+		if (t === "architecture") mainRef.current?.scrollTo({ top: 0 });
 		setTab(t);
 		setAnimKey((k) => k + 1);
 		setTopbarHidden(false);
@@ -155,18 +157,18 @@ export default function App()
 		scheduleHideRef.current();
 		if (epId) setTimeout(() => setActiveEpId(null), 1200);
 		if (pageId) setTimeout(() => setActivePageId(null), 1200);
-		if (sectionId) setTimeout(() => setActiveSectionId(null), 1200);
 	};
 
-	// Route a RefText pill click: an endpoint id switches tabs and expands
-	// the card via the existing navigateTo path; anything else is treated
-	// as an auth-strategy id and just opens/highlights it inside the
-	// always-mounted SecurityReference card (no tab switch needed).
+	// Shared reference links can target an architecture topic, an endpoint, or an auth strategy.
 	useEffect(() =>
 	{
 		setRefNavHandler((id) =>
 		{
-			if (ENDPOINTS.some((e) => e.id === id))
+			if (id.startsWith("architecture/"))
+			{
+				navigateTo("architecture", null, null, id.slice("architecture/".length));
+			}
+			else if (ENDPOINTS.some((e) => e.id === id))
 			{
 				navigateTo("endpoints", id);
 			}
@@ -217,6 +219,25 @@ export default function App()
 	const isEps = tab === "endpoints";
 	const tabViewClass = `tab-view tab-view--${TABS.indexOf(prevTab) < TABS.indexOf(tab) ? "from-left" : "from-right"}`;
 
+	const securityReference = (
+		<SecurityReference key="security"
+			open={secOpen}
+			onToggle={() => setSecOpen((o) => !o)}
+			activeStratId={activeStratId}
+		/>
+	);
+	const activeView = (
+		<div key={animKey} className={tabViewClass}>
+			{isEps
+				? <EndpointsView highlightId={activeEpId} />
+				: tab === "pages"
+					? <PagesView highlightPageId={activePageId} highlightEndpointId={activeEpId} />
+					: <ArchitectureView referenceId={activeSectionId} onReferenceChange={setActiveSectionId}
+						onNavigate={navigateTo} chapter={chapter} onChapterChange={setChapter} />
+			}
+		</div>
+	);
+
 	return (
 		<div className="layout">
 			<header
@@ -251,9 +272,9 @@ export default function App()
 							onClick={() => switchTab(t)}
 						>
 							{t.charAt(0).toUpperCase() + t.slice(1)}
-							<span className="tab-btn-count">
-								{t === "endpoints" ? ENDPOINTS.length : t === "pages" ? PAGES.length : ARCHITECTURE_SECTIONS.length}
-							</span>
+							{t !== "architecture" && <span className="tab-btn-count">
+								{t === "endpoints" ? ENDPOINTS.length : PAGES.length}
+							</span>}
 							{tab !== t && !isPhone && (
 								<kbd className="tab-btn-shortcut">{isMac ? "⌥" : "Alt+"}{i + 1}</kbd>
 							)}
@@ -262,9 +283,9 @@ export default function App()
 				</nav>
 
 				{!isPhone && (
-					<span className="topbar-shortcuts">
-						<kbd>Esc</kbd> collapse one level <kbd>Shift</kbd>+<kbd>Esc</kbd> collapse all <kbd>Ctrl</kbd>+<kbd>1</kbd>-<kbd>9</kbd> collapse item
-					</span>
+					<details className="topbar-shortcuts"><summary>Shortcuts</summary><div className="shortcut-sheet">
+						<kbd>Esc</kbd> collapse one level <kbd>Shift</kbd>+<kbd>Esc</kbd> collapse all <kbd>{isMac ? "⌘" : "Ctrl"}</kbd>+<kbd>1</kbd>-<kbd>9</kbd> collapse item
+					</div></details>
 				)}
 
 				<button className="pal-trigger" onClick={() => setPaletteOpen(true)}>
@@ -277,19 +298,13 @@ export default function App()
 			</header>
 
 			<div ref={mainRef} className="main">
-				<SecurityReference
-					open={secOpen}
-					onToggle={() => setSecOpen((o) => !o)}
-					activeStratId={activeStratId}
-				/>
-				<div key={animKey} className={tabViewClass}>
-					{isEps
-						? <EndpointsView highlightId={activeEpId} />
-						: tab === "pages"
-							? <PagesView highlightPageId={activePageId} highlightEndpointId={activeEpId} />
-							: <ArchitectureView highlightSectionId={activeSectionId} />
-					}
-				</div>
+				{tab === "architecture" ? [
+				   activeView,
+				   securityReference
+				] : [
+				   securityReference,
+				   activeView
+				]}
 			</div>
 
 			<CommandPalette
